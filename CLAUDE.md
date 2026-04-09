@@ -91,13 +91,14 @@ src/
 
 ## Skills
 
-이 프로젝트에는 3개의 도메인 스킬이 있다. 해당 도메인 작업 시 반드시 참조할 것:
+이 프로젝트에는 4개의 스킬이 있다. 해당 도메인 작업 시 반드시 참조할 것:
 
 | Skill | When to Use |
 |-------|-------------|
 | `git-commit-analyzer` | GitHub 커밋 수집, Gemini 분석, 커밋 그룹핑, 태스크 추출 작업 시 |
 | `notion-db-sync` | Notion DB 페이지 CRUD, 프로퍼티 빌딩, 중복 방지 로직 작업 시 |
 | `nextjs-polling-service` | 폴링 스케줄러, instrumentation.ts, 파이프라인 오케스트레이션 작업 시 |
+| `frontend-design` | UI 컴포넌트, 페이지, 인터페이스 구현 시 — 독창적이고 프로덕션 수준의 디자인 |
 
 ## Key Documents
 
