@@ -98,23 +98,25 @@ describe("credential repository", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("should reject duplicate user_id + provider", () => {
+  it("should allow multiple credentials for same user and provider", () => {
     insertCredential(db, {
       userId: "user1",
       provider: "git",
       credential: "token1",
-      label: null,
+      label: "회사 GitHub",
+      metadata: null,
+    });
+    insertCredential(db, {
+      userId: "user1",
+      provider: "git",
+      credential: "token2",
+      label: "개인 GitHub",
       metadata: null,
     });
 
-    expect(() => {
-      insertCredential(db, {
-        userId: "user1",
-        provider: "git",
-        credential: "token2",
-        label: null,
-        metadata: null,
-      });
-    }).toThrow();
+    const creds = getCredentialsByUser(db, "user1");
+    expect(creds).toHaveLength(2);
+    expect(creds.map((c: any) => c.label)).toContain("회사 GitHub");
+    expect(creds.map((c: any) => c.label)).toContain("개인 GitHub");
   });
 });

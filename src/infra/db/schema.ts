@@ -34,8 +34,19 @@ export function createTables(db: Database.Database): void {
       label TEXT,
       metadata TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(user_id, provider)
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      project TEXT NOT NULL,
+      date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS sync_logs (
@@ -71,5 +82,28 @@ export function migrateSchema(db: Database.Database): void {
 
   if (!syncColumnNames.includes("user_id")) {
     db.exec("ALTER TABLE sync_logs ADD COLUMN user_id TEXT NOT NULL DEFAULT ''");
+  }
+
+  // user_credentials UNIQUE(user_id, provider) 제약 제거 — 다중 자격증명 허용
+  const credIndexInfo = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_credentials'"
+  ).get() as { sql: string } | undefined;
+
+  if (credIndexInfo?.sql?.includes("UNIQUE(user_id, provider)")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_credentials_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        credential TEXT NOT NULL,
+        label TEXT,
+        metadata TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO user_credentials_new SELECT * FROM user_credentials;
+      DROP TABLE user_credentials;
+      ALTER TABLE user_credentials_new RENAME TO user_credentials;
+    `);
   }
 }
