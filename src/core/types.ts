@@ -35,6 +35,9 @@ export interface Repository {
   pollingIntervalMin: number;
   createdAt: string;
   updatedAt: string;
+  userId: string;
+  cloneUrl: string;
+  clonePath: string | null;
 }
 
 /** 동기화 로그 */
@@ -47,6 +50,7 @@ export interface SyncLog {
   errorMessage: string | null;
   startedAt: string;
   completedAt: string | null;
+  userId: string;
 }
 
 /** Gemini 분석 요청 페이로드 */
@@ -62,4 +66,15 @@ export interface SchedulerStatus {
   lastRunAt: string | null;
   nextRunAt: string | null;
   intervalMin: number;
+}
+
+/** 사용자 자격증명 (토큰 값은 infra 레이어에서만 복호화) */
+export interface UserCredential {
+  id: number;
+  userId: string;
+  provider: "git" | "notion";
+  label: string | null;
+  metadata: Record<string, string> | null;
+  createdAt: string;
+  updatedAt: string;
 }
