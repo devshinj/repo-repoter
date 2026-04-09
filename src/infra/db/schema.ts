@@ -106,4 +106,18 @@ export function migrateSchema(db: Database.Database): void {
       ALTER TABLE user_credentials_new RENAME TO user_credentials;
     `);
   }
+
+  // reports 테이블 마이그레이션
+  const reportColumns = db.prepare("PRAGMA table_info(reports)").all() as any[];
+  const reportColumnNames = reportColumns.map((c: any) => c.name);
+
+  if (!reportColumnNames.includes("date_start")) {
+    db.exec("ALTER TABLE reports ADD COLUMN date_start TEXT");
+  }
+  if (!reportColumnNames.includes("date_end")) {
+    db.exec("ALTER TABLE reports ADD COLUMN date_end TEXT");
+  }
+  if (!reportColumnNames.includes("status")) {
+    db.exec("ALTER TABLE reports ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'");
+  }
 }

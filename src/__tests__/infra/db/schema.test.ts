@@ -25,16 +25,19 @@ describe("createTables", () => {
     expect(columnNames).toContain("metadata");
   });
 
-  it("should enforce unique(user_id, provider) on user_credentials", () => {
+  it("should allow multiple credentials for same user and provider", () => {
     db.prepare(
       "INSERT INTO user_credentials (user_id, provider, credential) VALUES (?, ?, ?)"
     ).run("user1", "git", "encrypted-token");
 
-    expect(() => {
-      db.prepare(
-        "INSERT INTO user_credentials (user_id, provider, credential) VALUES (?, ?, ?)"
-      ).run("user1", "git", "another-token");
-    }).toThrow();
+    db.prepare(
+      "INSERT INTO user_credentials (user_id, provider, credential) VALUES (?, ?, ?)"
+    ).run("user1", "git", "another-token");
+
+    const rows = db.prepare(
+      "SELECT * FROM user_credentials WHERE user_id = ? AND provider = ?"
+    ).all("user1", "git");
+    expect(rows).toHaveLength(2);
   });
 
   it("should have user_id, clone_url, clone_path columns in repositories", () => {
