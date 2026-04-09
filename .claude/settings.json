@@ -9,10 +9,13 @@
       "Bash(git * | * | *)",
       "Bash(git * | *)",
       "Bash(git *)",
+      "Bash(git add * && git commit *)",
+      "Bash(cd * && git add * && git commit *)",
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(node *)",
       "Bash(mkdir *)",
+      "Bash(mkdir * && mkdir *)",
       "Bash(ls *)",
       "Bash(cat *)",
       "Bash(grep *)"

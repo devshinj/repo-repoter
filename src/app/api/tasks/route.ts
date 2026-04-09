@@ -16,10 +16,13 @@ export async function GET(request: NextRequest) {
   if (project) filters.push({ property: "프로젝트", select: { equals: project } });
   if (date) filters.push({ property: "작업일", date: { equals: date } });
 
-  const response = await notion.databases.query({
-    database_id: process.env.NOTION_TASK_DB_ID!,
-    filter: filters.length > 0 ? { and: filters } : undefined,
-    sorts: [{ property: "작업일", direction: "descending" }],
+  const response: any = await notion.request({
+    path: `databases/${process.env.NOTION_TASK_DB_ID!}/query`,
+    method: "post",
+    body: {
+      filter: filters.length > 0 ? { and: filters } : undefined,
+      sorts: [{ property: "작업일", direction: "descending" }],
+    },
   });
 
   return NextResponse.json(response.results);

@@ -53,28 +53,29 @@ export async function createDailyTaskPage(task: DailyTask): Promise<string> {
   return response.id;
 }
 
-export async function isCommitAlreadySynced(sha: string): Promise<boolean> {
+async function queryDatabase(databaseId: string, filter?: any, sorts?: any[]): Promise<any> {
   const client = getClient();
-  const response = await client.databases.query({
-    database_id: process.env.NOTION_COMMIT_DB_ID!,
-    filter: {
-      property: "Commit SHA",
-      rich_text: { equals: sha },
-    },
+  return client.request({
+    path: `databases/${databaseId}/query`,
+    method: "post",
+    body: { filter, sorts },
+  });
+}
+
+export async function isCommitAlreadySynced(sha: string): Promise<boolean> {
+  const response = await queryDatabase(process.env.NOTION_COMMIT_DB_ID!, {
+    property: "Commit SHA",
+    rich_text: { equals: sha },
   });
   return response.results.length > 0;
 }
 
 export async function isDailyTaskExists(project: string, date: string): Promise<string | null> {
-  const client = getClient();
-  const response = await client.databases.query({
-    database_id: process.env.NOTION_TASK_DB_ID!,
-    filter: {
-      and: [
-        { property: "프로젝트", select: { equals: project } },
-        { property: "작업일", date: { equals: date } },
-      ],
-    },
+  const response = await queryDatabase(process.env.NOTION_TASK_DB_ID!, {
+    and: [
+      { property: "프로젝트", select: { equals: project } },
+      { property: "작업일", date: { equals: date } },
+    ],
   });
   return response.results.length > 0 ? response.results[0].id : null;
 }

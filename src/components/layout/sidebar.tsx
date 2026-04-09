@@ -33,12 +33,10 @@ export function Sidebar() {
               key={item.href}
               variant={isActive ? "secondary" : "ghost"}
               className={cn("w-full justify-start gap-3", isActive && "bg-accent")}
-              asChild
+              render={<Link href={item.href} />}
             >
-              <Link href={item.href}>
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
+              <Icon className="h-4 w-4" />
+              {item.label}
             </Button>
           );
         })}
