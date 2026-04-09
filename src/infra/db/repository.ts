@@ -1,5 +1,21 @@
 import Database from "better-sqlite3";
 
+interface InsertUserInput {
+  name: string;
+  email: string;
+  passwordHash: string;
+}
+
+export function insertUser(db: Database.Database, input: InsertUserInput): void {
+  db.prepare(
+    "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)"
+  ).run(input.name, input.email, input.passwordHash);
+}
+
+export function getUserByEmail(db: Database.Database, email: string) {
+  return db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any | undefined;
+}
+
 interface InsertRepoInput {
   owner: string;
   repo: string;

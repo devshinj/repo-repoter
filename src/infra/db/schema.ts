@@ -15,6 +15,14 @@ export function createTables(db: Database.Database): void {
       UNIQUE(owner, repo)
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS sync_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,

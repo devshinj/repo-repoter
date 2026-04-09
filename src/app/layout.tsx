@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Git-Notion Task Tracker",
+  title: "Repo Task Tracker",
   description: "Git 커밋을 분석하여 Notion에 일일 업무 기록을 자동 생성합니다",
 };
 

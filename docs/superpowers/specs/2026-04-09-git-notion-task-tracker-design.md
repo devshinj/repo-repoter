@@ -1,4 +1,4 @@
-# Git-Notion Task Tracker 설계 스펙
+# Repo Task Tracker 설계 스펙
 
 ## Context
 

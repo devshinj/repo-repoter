@@ -1,4 +1,4 @@
-# Git-Notion Task Tracker
+# Repo Task Tracker
 
 ## Architecture
 

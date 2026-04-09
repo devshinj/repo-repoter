@@ -1,4 +1,4 @@
-# CLAUDE.md — Git-Notion Task Tracker
+# CLAUDE.md — Repo Task Tracker
 
 ## Project Overview
 

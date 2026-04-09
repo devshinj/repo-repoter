@@ -1,4 +1,4 @@
-# Git-Notion Task Tracker Implementation Plan
+# Repo Task Tracker Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -197,7 +197,7 @@ data/*.db-journal
 - [ ] **Step 5: AGENTS.md 생성**
 
 ```markdown
-# Git-Notion Task Tracker
+# Repo Task Tracker
 
 ## Architecture
 
@@ -1829,7 +1829,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Git-Notion Task Tracker</CardTitle>
+          <CardTitle>Repo Task Tracker</CardTitle>
           <CardDescription>HRMS 계정으로 로그인하세요</CardDescription>
         </CardHeader>
         <form
@@ -1858,7 +1858,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Git-Notion Task Tracker",
+  title: "Repo Task Tracker",
   description: "Git 커밋을 분석하여 Notion에 일일 업무 기록을 자동 생성합니다",
 };
 
