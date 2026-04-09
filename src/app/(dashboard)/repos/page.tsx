@@ -26,20 +26,22 @@ import { toast } from "sonner";
 export default function ReposPage() {
   const [repos, setRepos] = useState<any[]>([]);
   const [showDialog, setShowDialog] = useState(false);
-  const [repoUrl, setRepoUrl] = useState("");
+  const [cloneUrl, setCloneUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState<number | null>(null);
 
   const fetchRepos = () => {
-    fetch("/api/repos").then((r) => r.json()).then(setRepos);
+    fetch("/api/repos").then((r) => r.json()).then((data) => {
+      if (Array.isArray(data)) setRepos(data);
+    });
   };
 
   useEffect(() => { fetchRepos(); }, []);
 
   const handleAdd = async () => {
-    const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-    if (!match) {
-      toast.error("올바른 GitHub 저장소 URL을 입력하세요");
+    if (!cloneUrl) {
+      toast.error("Git 저장소 URL을 입력하세요");
       return;
     }
 
@@ -48,13 +50,13 @@ export default function ReposPage() {
       const res = await fetch("/api/repos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ owner: match[1], repo: match[2].replace(".git", ""), branch }),
+        body: JSON.stringify({ cloneUrl, branch }),
       });
 
       if (res.ok) {
-        toast.success("저장소가 등록되었습니다");
+        toast.success("저장소가 등록되었습니다. 클론 진행 중...");
         setShowDialog(false);
-        setRepoUrl("");
+        setCloneUrl("");
         setBranch("main");
         fetchRepos();
       } else {
@@ -74,18 +76,34 @@ export default function ReposPage() {
     }
   };
 
+  const handleSync = async (id: number) => {
+    setSyncing(id);
+    try {
+      const res = await fetch(`/api/repos/${id}/sync`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`동기화 완료: ${data.commitsProcessed}개 커밋, ${data.tasksCreated}개 태스크`);
+        fetchRepos();
+      } else {
+        toast.error(data.error || "동기화 실패");
+      }
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   return (
     <div>
       <Header
         title="저장소 관리"
-        description="모니터링할 GitHub 저장소를 등록하고 관리합니다"
+        description="모니터링할 Git 저장소를 등록하고 관리합니다"
         actions={<Button onClick={() => setShowDialog(true)}>저장소 추가</Button>}
       />
 
       {repos.length === 0 ? (
         <EmptyState
           title="등록된 저장소가 없습니다"
-          description="GitHub 저장소를 추가하여 커밋 모니터링을 시작하세요"
+          description="Git 저장소를 추가하여 커밋 모니터링을 시작하세요. 먼저 설정에서 Git PAT을 등록해주세요."
           action={<Button onClick={() => setShowDialog(true)}>첫 저장소 추가</Button>}
         />
       ) : (
@@ -102,16 +120,38 @@ export default function ReposPage() {
           <TableBody>
             {repos.map((repo: any) => (
               <TableRow key={repo.id}>
-                <TableCell className="font-medium">{repo.owner}/{repo.repo}</TableCell>
+                <TableCell>
+                  <div>
+                    <span className="font-medium">{repo.owner}/{repo.repo}</span>
+                    <div className="text-xs text-muted-foreground truncate max-w-xs">{repo.clone_url}</div>
+                  </div>
+                </TableCell>
                 <TableCell>{repo.branch}</TableCell>
                 <TableCell className="font-mono text-xs">{repo.last_synced_sha?.slice(0, 7) || "-"}</TableCell>
                 <TableCell>
-                  <Badge variant={repo.is_active ? "default" : "secondary"}>
-                    {repo.is_active ? "활성" : "비활성"}
-                  </Badge>
+                  <div className="flex gap-1">
+                    <Badge variant={repo.is_active ? "default" : "secondary"}>
+                      {repo.is_active ? "활성" : "비활성"}
+                    </Badge>
+                    {repo.clone_path ? (
+                      <Badge variant="outline">클론됨</Badge>
+                    ) : (
+                      <Badge variant="secondary">클론 중</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(repo.id)}>삭제</Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSync(repo.id)}
+                      disabled={syncing === repo.id || !repo.clone_path}
+                    >
+                      {syncing === repo.id ? "동기화 중..." : "지금 동기화"}
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleDelete(repo.id)}>삭제</Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -126,12 +166,13 @@ export default function ReposPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">GitHub 저장소 URL</label>
+              <label className="text-sm font-medium">Git 저장소 URL</label>
               <Input
-                placeholder="https://github.com/owner/repo"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
+                placeholder="https://github.com/owner/repo.git"
+                value={cloneUrl}
+                onChange={(e) => setCloneUrl(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground mt-1">GitHub, GitLab, Gitea 등 HTTPS URL을 지원합니다</p>
             </div>
             <div>
               <label className="text-sm font-medium">브랜치</label>
