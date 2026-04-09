@@ -233,6 +233,10 @@ export default function SettingsPage() {
                             value={renewTokenValue}
                             onChange={(e) => setRenewTokenValue(e.target.value)}
                             className="h-8 max-w-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRenewToken(cred.id);
+                              if (e.key === "Escape") { setRenewingTokenId(null); setRenewTokenValue(""); }
+                            }}
                           />
                           <Button size="sm" onClick={() => handleRenewToken(cred.id)}>저장</Button>
                           <Button size="sm" variant="ghost" onClick={() => { setRenewingTokenId(null); setRenewTokenValue(""); }}>취소</Button>
