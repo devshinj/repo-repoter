@@ -72,7 +72,7 @@ export interface SchedulerStatus {
 export interface UserCredential {
   id: number;
   userId: string;
-  provider: "git" | "notion";
+  provider: string;
   label: string | null;
   metadata: Record<string, string> | null;
   createdAt: string;
