@@ -133,6 +133,12 @@ export function updateGitAuthor(db: Database.Database, id: number, userId: strin
   return result.changes > 0;
 }
 
+export function updatePrimaryLanguage(db: Database.Database, id: number, language: string | null): void {
+  db.prepare(
+    "UPDATE repositories SET primary_language = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(language, id);
+}
+
 export function getActiveUsersWithRepos(db: Database.Database): string[] {
   const rows = db.prepare(
     "SELECT DISTINCT user_id FROM repositories WHERE is_active = 1 AND user_id != ''"
@@ -238,6 +244,88 @@ export function getCommitsByDateRange(
     committedDate: r.committed_date,
     committedAt: r.committed_at,
   }));
+}
+
+export function getLastSyncCompletedAt(db: Database.Database, userId: string): string | null {
+  const row = db.prepare(
+    "SELECT MAX(completed_at) as last FROM sync_logs WHERE user_id = ? AND status = 'success'"
+  ).get(userId) as { last: string | null } | undefined;
+  return row?.last ?? null;
+}
+
+export interface LastSyncSummary {
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+  recentSuccessCount: number;
+  recentErrorCount: number;
+  totalCommitsProcessed: number;
+}
+
+export function getLastSyncSummary(db: Database.Database, userId: string): LastSyncSummary {
+  const success = db.prepare(
+    "SELECT completed_at, commits_processed FROM sync_logs WHERE user_id = ? AND status = 'success' ORDER BY completed_at DESC LIMIT 1"
+  ).get(userId) as { completed_at: string; commits_processed: number } | undefined;
+
+  const error = db.prepare(
+    "SELECT completed_at, error_message FROM sync_logs WHERE user_id = ? AND status = 'error' ORDER BY completed_at DESC LIMIT 1"
+  ).get(userId) as { completed_at: string; error_message: string | null } | undefined;
+
+  const recent = db.prepare(
+    `SELECT status, COUNT(*) as cnt, SUM(commits_processed) as total_commits
+     FROM sync_logs WHERE user_id = ? AND completed_at >= datetime('now', '-1 day')
+     GROUP BY status`
+  ).all(userId) as { status: string; cnt: number; total_commits: number }[];
+
+  let recentSuccessCount = 0;
+  let recentErrorCount = 0;
+  let totalCommitsProcessed = 0;
+  for (const r of recent) {
+    if (r.status === "success") {
+      recentSuccessCount = r.cnt;
+      totalCommitsProcessed = r.total_commits;
+    } else {
+      recentErrorCount = r.cnt;
+    }
+  }
+
+  return {
+    lastSuccessAt: success?.completed_at ?? null,
+    lastErrorAt: error?.completed_at ?? null,
+    lastErrorMessage: error?.error_message ?? null,
+    recentSuccessCount,
+    recentErrorCount,
+    totalCommitsProcessed,
+  };
+}
+
+export function getHeatmapCounts(
+  db: Database.Database,
+  userId: string,
+  since: string,
+  until: string
+): Record<string, number> {
+  const repos = getRepositoriesByUser(db, userId);
+  if (repos.length === 0) return {};
+
+  const repoIds: number[] = [];
+  const allAuthors: string[] = [];
+
+  for (const repo of repos) {
+    repoIds.push(repo.id);
+    if (repo.git_author) {
+      const authors = repo.git_author.split(",").map((a: string) => a.trim()).filter(Boolean);
+      allAuthors.push(...authors);
+    }
+  }
+
+  return getCommitCountsByDateRange(
+    db,
+    repoIds,
+    since,
+    until,
+    allAuthors.length > 0 ? allAuthors : undefined
+  );
 }
 
 export function getCommitsByDate(

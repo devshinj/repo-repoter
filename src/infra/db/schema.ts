@@ -139,4 +139,8 @@ export function migrateSchema(db: Database.Database): void {
   if (!reportColumnNames.includes("status")) {
     db.exec("ALTER TABLE reports ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'");
   }
+
+  if (!repoColumnNames.includes("primary_language")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN primary_language TEXT");
+  }
 }

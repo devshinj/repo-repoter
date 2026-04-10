@@ -69,6 +69,12 @@ export function buildCommitRecords(
   });
 }
 
+export async function fetchRepoLanguage(owner: string, repo: string): Promise<string | null> {
+  const client = getOctokit();
+  const { data } = await client.rest.repos.get({ owner, repo });
+  return data.language ?? null;
+}
+
 export async function fetchCommitDiff(owner: string, repo: string, sha: string): Promise<string> {
   const client = getOctokit();
   const { data } = await client.rest.repos.getCommit({
