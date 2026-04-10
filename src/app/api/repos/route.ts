@@ -9,11 +9,14 @@ import {
   getRepositoriesByUser,
   deleteRepositoryForUser,
   getRepositoryByIdAndUser,
+  updateGitAuthor,
+  insertCommitCache,
+  type CacheCommit,
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { parseGitUrl } from "@/infra/git/parse-git-url";
-import { cloneRepository } from "@/infra/git/git-client";
+import { cloneRepository, getBranches, getCommitsForCache } from "@/infra/git/git-client";
 import { auth } from "@/lib/auth";
 
 function getDb() {
@@ -88,12 +91,58 @@ export async function POST(request: NextRequest) {
         await mkdir(join(process.cwd(), "data", "repos", userId, parsed!.owner), { recursive: true });
         await cloneRepository(cloneUrl, clonePath, token);
         console.log(`[Repos] Cloned ${cloneUrl} to ${clonePath}`);
+
+        // 초기 캐시 빌드
+        try {
+          const cacheDb = getDb();
+          try {
+            const branches = await getBranches(clonePath);
+            const cacheCommits = await getCommitsForCache(clonePath, branches);
+            if (cacheCommits.length > 0) {
+              const rows: CacheCommit[] = cacheCommits.map(c => ({
+                sha: c.sha,
+                repositoryId: repoRow.id,
+                branch: c.branch,
+                author: c.author,
+                message: c.message,
+                committedDate: c.committedDate,
+                committedAt: c.committedAt,
+              }));
+              const inserted = insertCommitCache(cacheDb, rows);
+              console.log(`[Repos] Cached ${inserted} commits for ${parsed!.owner}/${parsed!.repo}`);
+            }
+          } finally {
+            cacheDb.close();
+          }
+        } catch (cacheErr) {
+          console.error(`[Repos] Cache build failed for ${cloneUrl}:`, cacheErr);
+        }
       } catch (err) {
         console.error(`[Repos] Failed to clone ${cloneUrl}:`, err);
       }
     })();
 
     return NextResponse.json({ message: "Repository registered. Cloning in progress." }, { status: 201 });
+  } finally {
+    db.close();
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = session.user.id;
+
+  const body = await request.json();
+  const { id, gitAuthor } = body as { id: number; gitAuthor?: string };
+
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  const db = getDb();
+  try {
+    const updated = updateGitAuthor(db, id, userId, gitAuthor?.trim() || null);
+    if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+    return NextResponse.json({ message: "Updated" });
   } finally {
     db.close();
   }
