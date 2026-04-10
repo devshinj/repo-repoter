@@ -126,9 +126,125 @@ export function insertSyncLogForUser(db: Database.Database, input: InsertSyncLog
   ).run(input.repositoryId, input.userId, input.status, input.commitsProcessed, input.tasksCreated, input.errorMessage);
 }
 
+export function updateGitAuthor(db: Database.Database, id: number, userId: string, gitAuthor: string | null): boolean {
+  const result = db.prepare(
+    "UPDATE repositories SET git_author = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+  ).run(gitAuthor, id, userId);
+  return result.changes > 0;
+}
+
 export function getActiveUsersWithRepos(db: Database.Database): string[] {
   const rows = db.prepare(
     "SELECT DISTINCT user_id FROM repositories WHERE is_active = 1 AND user_id != ''"
   ).all() as any[];
   return rows.map((r: any) => r.user_id);
+}
+
+// --- Commit Cache ---
+
+export interface CacheCommit {
+  sha: string;
+  repositoryId: number;
+  branch: string;
+  author: string;
+  message: string;
+  committedDate: string;   // YYYY-MM-DD
+  committedAt: string;     // ISO 8601
+}
+
+export function insertCommitCache(db: Database.Database, commits: CacheCommit[]): number {
+  const stmt = db.prepare(
+    `INSERT OR IGNORE INTO commit_cache (sha, repository_id, branch, author, message, committed_date, committed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertMany = db.transaction((rows: CacheCommit[]) => {
+    let inserted = 0;
+    for (const c of rows) {
+      const result = stmt.run(c.sha, c.repositoryId, c.branch, c.author, c.message, c.committedDate, c.committedAt);
+      inserted += result.changes;
+    }
+    return inserted;
+  });
+  return insertMany(commits);
+}
+
+export function getLatestCacheDate(db: Database.Database, repositoryId: number): string | null {
+  const row = db.prepare(
+    "SELECT MAX(committed_date) as latest FROM commit_cache WHERE repository_id = ?"
+  ).get(repositoryId) as { latest: string | null } | undefined;
+  return row?.latest ?? null;
+}
+
+export function getCommitCountsByDateRange(
+  db: Database.Database,
+  repoIds: number[],
+  since: string,
+  until: string,
+  authors?: string[]
+): Record<string, number> {
+  if (repoIds.length === 0) return {};
+
+  const placeholders = repoIds.map(() => "?").join(",");
+  let sql = `SELECT committed_date, COUNT(*) as count FROM commit_cache
+    WHERE repository_id IN (${placeholders}) AND committed_date BETWEEN ? AND ?`;
+  const params: (string | number)[] = [...repoIds, since, until];
+
+  if (authors && authors.length > 0) {
+    const authorClauses = authors.map(() => "author LIKE ?").join(" OR ");
+    sql += ` AND (${authorClauses})`;
+    params.push(...authors.map(a => `%${a}%`));
+  }
+
+  sql += " GROUP BY committed_date";
+
+  const rows = db.prepare(sql).all(...params) as { committed_date: string; count: number }[];
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    counts[row.committed_date] = row.count;
+  }
+  return counts;
+}
+
+export function getCommitsByDateRange(
+  db: Database.Database,
+  repoIds: number[],
+  since: string,
+  until: string,
+  authors?: string[]
+): CacheCommit[] {
+  if (repoIds.length === 0) return [];
+
+  const placeholders = repoIds.map(() => "?").join(",");
+  let sql = `SELECT sha, repository_id, branch, author, message, committed_date, committed_at
+    FROM commit_cache
+    WHERE repository_id IN (${placeholders}) AND committed_date BETWEEN ? AND ?`;
+  const params: (string | number)[] = [...repoIds, since, until];
+
+  if (authors && authors.length > 0) {
+    const authorClauses = authors.map(() => "author LIKE ?").join(" OR ");
+    sql += ` AND (${authorClauses})`;
+    params.push(...authors.map(a => `%${a}%`));
+  }
+
+  sql += " ORDER BY committed_at DESC";
+
+  const rows = db.prepare(sql).all(...params) as any[];
+  return rows.map(r => ({
+    sha: r.sha,
+    repositoryId: r.repository_id,
+    branch: r.branch,
+    author: r.author,
+    message: r.message,
+    committedDate: r.committed_date,
+    committedAt: r.committed_at,
+  }));
+}
+
+export function getCommitsByDate(
+  db: Database.Database,
+  repoIds: number[],
+  date: string,
+  authors?: string[]
+): CacheCommit[] {
+  return getCommitsByDateRange(db, repoIds, date, date, authors);
 }
