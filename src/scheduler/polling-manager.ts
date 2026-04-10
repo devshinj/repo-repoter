@@ -8,10 +8,13 @@ import {
   getRepositoriesByUser,
   updateLastSyncedSha,
   insertSyncLogForUser,
+  getLatestCacheDate,
+  insertCommitCache,
+  type CacheCommit,
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { pullRepository, getCommitsSince, getCommitDiff } from "@/infra/git/git-client";
+import { pullRepository, getCommitsSince, getCommitDiff, getBranches, getCommitsForCache } from "@/infra/git/git-client";
 import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/gemini/gemini-client";
 import {
   createCommitLogPage,
@@ -102,6 +105,31 @@ export async function runSyncCycle(): Promise<void> {
 
           try {
             await pullRepository(repo.clone_path);
+
+            // --- 캐시 빌드 (증분) ---
+            try {
+              const branches = await getBranches(repo.clone_path);
+              const latestDate = getLatestCacheDate(database, repo.id);
+              const cacheCommits = await getCommitsForCache(repo.clone_path, branches, latestDate ?? undefined);
+              if (cacheCommits.length > 0) {
+                const rows: CacheCommit[] = cacheCommits.map(c => ({
+                  sha: c.sha,
+                  repositoryId: repo.id,
+                  branch: c.branch,
+                  author: c.author,
+                  message: c.message,
+                  committedDate: c.committedDate,
+                  committedAt: c.committedAt,
+                }));
+                const inserted = insertCommitCache(database, rows);
+                if (inserted > 0) {
+                  console.log(`[Scheduler] ${repo.owner}/${repo.repo}: cached ${inserted} new commits`);
+                }
+              }
+            } catch (cacheErr) {
+              console.error(`[Scheduler] ${repo.owner}/${repo.repo}: cache build failed -`, cacheErr);
+            }
+
             const commits = await getCommitsSince(repo.clone_path, repo.branch, repo.clone_url, repo.last_synced_sha);
 
             if (commits.length === 0) {
