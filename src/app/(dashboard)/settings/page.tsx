@@ -20,6 +20,7 @@ interface Credential {
   id: number;
   provider: string;
   label: string | null;
+  metadata: { type: string; host: string; apiBase: string } | null;
   maskedToken: string;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +47,8 @@ export default function SettingsPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newToken, setNewToken] = useState("");
   const [saving, setSaving] = useState(false);
+  const [newServiceType, setNewServiceType] = useState<"github" | "gitea">("github");
+  const [newHost, setNewHost] = useState("");
 
   const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
   const [editingLabelValue, setEditingLabelValue] = useState("");
@@ -65,17 +68,28 @@ export default function SettingsPage() {
       toast.error("라벨과 토큰을 모두 입력하세요");
       return;
     }
+    if (newServiceType === "gitea" && !newHost) {
+      toast.error("Gitea 호스트 URL을 입력하세요");
+      return;
+    }
+
+    const metadata = newServiceType === "github"
+      ? { type: "github", host: "github.com", apiBase: "https://api.github.com" }
+      : { type: "gitea", host: newHost, apiBase: `https://${newHost}/api/v1` };
+
     setSaving(true);
     try {
       const res = await fetch("/api/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: newProvider, token: newToken, label: newLabel }),
+        body: JSON.stringify({ provider: newProvider, token: newToken, label: newLabel, metadata }),
       });
       if (res.ok) {
         toast.success("자격증명이 등록되었습니다");
         setNewToken("");
         setNewLabel("");
+        setNewHost("");
+        setNewServiceType("github");
         setAddDialogOpen(false);
         fetchCredentials();
       } else {
@@ -151,12 +165,43 @@ export default function SettingsPage() {
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div>
-                <label className="text-sm font-medium">서비스</label>
-                <div className="flex items-center gap-2 mt-1 p-2 bg-muted rounded-md">
-                  <GitBranch className="h-4 w-4" />
-                  <span className="text-sm">Git (GitHub, GitLab, Gitea)</span>
+                <label className="text-sm font-medium">서비스 타입</label>
+                <div className="flex gap-3 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceType"
+                      value="github"
+                      checked={newServiceType === "github"}
+                      onChange={() => { setNewServiceType("github"); setNewHost(""); }}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm">GitHub</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceType"
+                      value="gitea"
+                      checked={newServiceType === "gitea"}
+                      onChange={() => setNewServiceType("gitea")}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm">Gitea / 기타</span>
+                  </label>
                 </div>
               </div>
+              {newServiceType === "gitea" && (
+                <div>
+                  <label className="text-sm font-medium">호스트 URL</label>
+                  <Input
+                    placeholder="gitea.example.com"
+                    value={newHost}
+                    onChange={(e) => setNewHost(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">프로토콜 없이 호스트명만 입력 (예: gitea.company.com)</p>
+                </div>
+              )}
               <div>
                 <label className="text-sm font-medium">라벨</label>
                 <Input
@@ -209,7 +254,9 @@ export default function SettingsPage() {
                     ) : (
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{cred.label || "(라벨 없음)"}</span>
-                        <Badge variant="secondary" className="text-xs">Git</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {cred.metadata?.type === "gitea" ? `Gitea — ${cred.metadata.host}` : "GitHub"}
+                        </Badge>
                       </div>
                     )}
 
