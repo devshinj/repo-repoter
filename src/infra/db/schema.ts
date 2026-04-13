@@ -187,4 +187,20 @@ export function migrateSchema(db: Database.Database): void {
   if (!repoColumnNames.includes("primary_language")) {
     db.exec("ALTER TABLE repositories ADD COLUMN primary_language TEXT");
   }
+
+  // user_credentials: 기존 git credential에 GitHub 기본 metadata 적용
+  const credRows = db.prepare(
+    "SELECT id, metadata FROM user_credentials WHERE provider = 'git'"
+  ).all() as { id: number; metadata: string | null }[];
+
+  for (const row of credRows) {
+    if (!row.metadata || row.metadata === "") {
+      db.prepare(
+        "UPDATE user_credentials SET metadata = ? WHERE id = ?"
+      ).run(
+        JSON.stringify({ type: "github", host: "github.com", apiBase: "https://api.github.com" }),
+        row.id
+      );
+    }
+  }
 }
