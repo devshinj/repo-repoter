@@ -68,6 +68,25 @@ export interface SchedulerStatus {
   intervalMin: number;
 }
 
+/** Git 호스팅 서비스에서 조회한 원격 저장소 정보 */
+export interface RemoteRepository {
+  name: string;
+  owner: string;
+  fullName: string;
+  cloneUrl: string;
+  defaultBranch: string;
+  language: string | null;
+  isPrivate: boolean;
+  description: string | null;
+}
+
+/** Credential metadata에 저장되는 호스트 정보 */
+export interface GitProviderMeta {
+  type: "github" | "gitea";
+  host: string;
+  apiBase: string;
+}
+
 /** 사용자 자격증명 (토큰 값은 infra 레이어에서만 복호화) */
 export interface UserCredential {
   id: number;
