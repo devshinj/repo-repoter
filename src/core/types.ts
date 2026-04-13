@@ -38,6 +38,8 @@ export interface Repository {
   userId: string;
   cloneUrl: string;
   clonePath: string | null;
+  cloneStatus: "pending" | "cloning" | "caching" | "ready" | "error";
+  label: string | null;
 }
 
 /** 동기화 로그 */
@@ -82,7 +84,7 @@ export interface RemoteRepository {
 
 /** Credential metadata에 저장되는 호스트 정보 */
 export interface GitProviderMeta {
-  type: "github" | "gitea";
+  type: "github" | "gitea" | "gitlab" | "bitbucket";
   host: string;
   apiBase: string;
 }

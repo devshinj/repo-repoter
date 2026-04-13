@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { stringColor } from "@/lib/color-hash";
-import { LayoutDashboard, GitFork, CalendarDays, FileText, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, GitFork, CalendarDays, FileText, Settings, LogOut, ExternalLink } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Logo } from "@/components/layout/logo";
+import { ThemeSwitch } from "@/components/layout/theme-switch";
 import { DotIdenticon } from "@/components/data-display/dot-identicon";
 
 const navItems = [
@@ -20,11 +20,14 @@ const navItems = [
   { href: "/settings", label: "설정", icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  user: { name: string; email: string };
+}
+
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const userName = session?.user?.name || "사용자";
-  const userEmail = session?.user?.email || "";
+  const userName = user.name;
+  const userEmail = user.email;
   const userColorSet = stringColor(userEmail || userName);
 
   return (
@@ -50,18 +53,27 @@ export function Sidebar() {
             </Button>
           );
         })}
+        <Separator className="my-2" />
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-muted-foreground"
+          nativeButton={false}
+          render={<a href="https://hrms.cudo.co.kr:9700/tasks" target="_blank" rel="noopener noreferrer" />}
+        >
+          <ExternalLink className="h-4 w-4" />
+          HRMS 태스크
+        </Button>
       </nav>
       <Separator />
       <div className="p-3 space-y-2">
-        {session?.user && (
-          <div className="flex items-center gap-2.5 px-2 py-1.5">
-            <DotIdenticon value={userEmail || userName} size={28} colorSet={userColorSet} className="flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{userName}</p>
-              {userEmail && <p className="text-[10px] text-muted-foreground truncate">{userEmail}</p>}
-            </div>
+        <div className="flex items-center gap-2.5 px-2 py-1.5">
+          <DotIdenticon value={userEmail || userName} size={28} colorSet={userColorSet} className="flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium truncate">{userName}</p>
+            {userEmail && <p className="text-[10px] text-muted-foreground truncate">{userEmail}</p>}
           </div>
-        )}
+          <ThemeSwitch />
+        </div>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-muted-foreground"

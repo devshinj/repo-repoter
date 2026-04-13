@@ -5,6 +5,8 @@ import { getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { listGitHubRepos } from "@/infra/git-provider/github-api";
 import { listGiteaRepos } from "@/infra/git-provider/gitea-api";
+import { listGitLabRepos } from "@/infra/git-provider/gitlab-api";
+import { listBitbucketRepos } from "@/infra/git-provider/bitbucket-api";
 import type { GitProviderMeta } from "@/core/types";
 
 export async function GET(request: NextRequest) {
@@ -39,6 +41,14 @@ export async function GET(request: NextRequest) {
     }
     if (meta.type === "gitea") {
       const repos = await listGiteaRepos(meta.apiBase, token);
+      return NextResponse.json(repos);
+    }
+    if (meta.type === "gitlab") {
+      const repos = await listGitLabRepos(meta.apiBase, token);
+      return NextResponse.json(repos);
+    }
+    if (meta.type === "bitbucket") {
+      const repos = await listBitbucketRepos(meta.apiBase, token);
       return NextResponse.json(repos);
     }
     return NextResponse.json({ error: `Unsupported provider type: ${meta.type}` }, { status: 400 });

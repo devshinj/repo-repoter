@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
     if (!metadata?.type || !metadata?.host || !metadata?.apiBase) {
       return NextResponse.json({ error: "metadata.type, metadata.host, metadata.apiBase are required for git provider" }, { status: 400 });
     }
-    if (!["github", "gitea"].includes(metadata.type)) {
-      return NextResponse.json({ error: "metadata.type must be 'github' or 'gitea'" }, { status: 400 });
+    if (!["github", "gitea", "gitlab", "bitbucket"].includes(metadata.type)) {
+      return NextResponse.json({ error: "metadata.type must be 'github', 'gitea', 'gitlab', or 'bitbucket'" }, { status: 400 });
     }
   }
 

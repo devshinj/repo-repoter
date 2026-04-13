@@ -116,8 +116,8 @@ export default function RepoDetailPage() {
   return (
     <div>
       <Header
-        title={`${repo.owner}/${repo.repo}`}
-        description={repo.clone_url}
+        title={repo.label || `${repo.owner}/${repo.repo}`}
+        description={repo.label ? `${repo.owner}/${repo.repo} — ${repo.clone_url}` : repo.clone_url}
         actions={
           <Button variant="outline" onClick={() => router.push("/repos")}>
             <ArrowLeft className="h-4 w-4 mr-2" />목록으로
@@ -127,21 +127,19 @@ export default function RepoDetailPage() {
 
       {/* 브랜치 선택 + 통계 */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-muted-foreground" />
-          <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="브랜치 선택" />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.map((b) => (
-                <SelectItem key={b} value={b}>{b}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <GitCommit className="h-4 w-4" />
+        <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+          <SelectTrigger className="max-w-64">
+            <GitBranch className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <SelectValue placeholder="브랜치 선택" />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false} className="w-auto min-w-[var(--anchor-width)]">
+            {branches.map((b) => (
+              <SelectItem key={b} value={b}>{b}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <GitCommit className="h-3.5 w-3.5" />
           <span>{commits.length}개 커밋</span>
         </div>
       </div>

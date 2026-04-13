@@ -187,6 +187,38 @@ export function migrateSchema(db: Database.Database): void {
   if (!repoColumnNames.includes("primary_language")) {
     db.exec("ALTER TABLE repositories ADD COLUMN primary_language TEXT");
   }
+  if (!repoColumnNames.includes("label")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN label TEXT");
+  }
+  if (!repoColumnNames.includes("credential_id")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN credential_id INTEGER REFERENCES user_credentials(id)");
+    // 기존 저장소에 clone_url 호스트 기반으로 credential_id 매핑
+    const allRepos = db.prepare("SELECT id, user_id, clone_url FROM repositories").all() as any[];
+    for (const repo of allRepos) {
+      try {
+        const host = new URL(repo.clone_url).hostname;
+        const cred = db.prepare(
+          "SELECT id, metadata FROM user_credentials WHERE user_id = ? AND provider = 'git'"
+        ).all(repo.user_id) as any[];
+        const match = cred.find((c: any) => {
+          const meta = c.metadata ? JSON.parse(c.metadata) : null;
+          return meta?.host?.includes(host);
+        });
+        if (match) {
+          db.prepare("UPDATE repositories SET credential_id = ? WHERE id = ?").run(match.id, repo.id);
+        } else if (cred.length === 1) {
+          db.prepare("UPDATE repositories SET credential_id = ? WHERE id = ?").run(cred[0].id, repo.id);
+        }
+      } catch { /* 잘못된 URL은 무시 */ }
+    }
+  }
+
+  if (!repoColumnNames.includes("clone_status")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN clone_status TEXT NOT NULL DEFAULT 'ready'");
+    // 기존 저장소: clone_path 유무로 상태 보정
+    db.exec("UPDATE repositories SET clone_status = 'ready' WHERE clone_path IS NOT NULL");
+    db.exec("UPDATE repositories SET clone_status = 'pending' WHERE clone_path IS NULL");
+  }
 
   // user_credentials: 기존 git credential에 GitHub 기본 metadata 적용
   const credRows = db.prepare(

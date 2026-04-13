@@ -34,7 +34,7 @@ function groupByDateAndRepo(commits: CacheCommit[], repos: any[]) {
           })),
         });
       }
-      dateRepos.push({ repoId, repoName: repo.repo, owner: repo.owner, branches });
+      dateRepos.push({ repoId, repoName: repo.repo, owner: repo.owner, label: repo.label || null, branches });
     }
     result.push({ date, repos: dateRepos });
   }

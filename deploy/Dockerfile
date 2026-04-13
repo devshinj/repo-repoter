@@ -27,7 +27,7 @@ FROM node:22-slim AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git \
+    curl git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 appuser \
@@ -42,8 +42,10 @@ RUN mkdir -p data/repos && chown -R appuser:appuser /app
 
 USER appuser
 
+ARG PORT=3002
+
 ENV NODE_ENV=production
-ENV PORT=${PORT:-3002}
+ENV PORT=${PORT}
 ENV HOSTNAME=0.0.0.0
 
 EXPOSE 3002

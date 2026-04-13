@@ -19,6 +19,7 @@ interface RepoDetail {
   repoId: number;
   repoName: string;
   owner: string;
+  label: string | null;
   branches: BranchCommits[];
 }
 
@@ -54,14 +55,14 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
   }, [rangeStart, rangeEnd, repoIds]);
 
   const summary = useMemo(() => {
-    const repoCommitCounts: Record<string, { owner: string; repoName: string; repoId: number; count: number }> = {};
+    const repoCommitCounts: Record<string, { owner: string; repoName: string; repoId: number; label: string | null; count: number }> = {};
     let totalCommits = 0;
 
     for (const day of data) {
       for (const repo of day.repos) {
         const key = `${repo.owner}/${repo.repoName}`;
         if (!repoCommitCounts[key]) {
-          repoCommitCounts[key] = { owner: repo.owner, repoName: repo.repoName, repoId: repo.repoId, count: 0 };
+          repoCommitCounts[key] = { owner: repo.owner, repoName: repo.repoName, repoId: repo.repoId, label: repo.label, count: 0 };
         }
         for (const b of repo.branches) {
           repoCommitCounts[key].count += b.commits.length;
@@ -89,8 +90,9 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
     });
   }
 
-  async function generateRangeReport(repo: { owner: string; repoName: string; repoId: number }) {
-    if (!confirm(`${rangeStart} ~ ${rangeEnd} — ${repo.owner}/${repo.repoName}\n\n기간 보고서를 작성하시겠습니까?`)) return;
+  async function generateRangeReport(repo: { owner: string; repoName: string; repoId: number; label?: string | null }) {
+    const displayName = repo.label || `${repo.owner}/${repo.repoName}`;
+    if (!confirm(`${rangeStart} ~ ${rangeEnd} — ${displayName}\n\n기간 보고서를 작성하시겠습니까?`)) return;
 
     setGeneratingRepoId(repo.repoId);
     try {
@@ -139,7 +141,7 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
                   >
                     <FolderGit2 className="h-2.5 w-2.5" style={{ color: oklch(color.solid) }} />
                   </div>
-                  <span className="text-xs font-medium">{repo.owner}/{repo.repoName}</span>
+                  <span className="text-xs font-medium">{repo.label || `${repo.owner}/${repo.repoName}`}</span>
                   <Badge
                     variant="secondary"
                     className="text-[10px] px-1.5 py-0"
@@ -205,7 +207,7 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
                             >
                               <FolderGit2 className="h-2.5 w-2.5" style={{ color: oklch(rColor.solid) }} />
                             </div>
-                            <span className="text-xs font-medium">{repo.owner}/{repo.repoName}</span>
+                            <span className="text-xs font-medium">{repo.label || `${repo.owner}/${repo.repoName}`}</span>
                             <Badge
                               variant="secondary"
                               className="text-[10px] px-1.5 py-0"

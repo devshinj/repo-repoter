@@ -9,7 +9,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex">
-      <Sidebar />
+      <Sidebar user={{ name: session.user.name || "사용자", email: session.user.email || "" }} />
       <PageContainer>{children}</PageContainer>
     </div>
   );

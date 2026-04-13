@@ -57,10 +57,12 @@ async function collectCommitsForDate(
 function buildPrompt(
   repoOwner: string,
   repoName: string,
+  repoLabel: string | null,
   dateLabel: string,
   allCommits: CommitEntry[],
   isRange: boolean
 ): string {
+  const displayName = repoLabel || `${repoOwner}/${repoName}`;
   const commitDetails = allCommits
     .map((c) => {
       const time = new Date(c.date).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
@@ -84,8 +86,13 @@ function buildPrompt(
   return `당신은 소프트웨어 개발팀의 업무 보고서 작성 도우미입니다.
 아래 Git 커밋 데이터를 분석하여 ${isRange ? "해당 기간의" : "해당일의"} **업무 보고서**를 작성해주세요. (구어체 사용 금지)
 
+**추가로, 보고서 내용을 함축하는 짧은 제목(20자 이내)을 한 줄로 생성해주세요.**
+제목은 반드시 응답의 첫 줄에 \`TITLE: \`로 시작하세요. 제목에 프로젝트명이나 날짜는 포함하지 마세요.
+예시: \`TITLE: OAuth 인증 흐름 구현 및 세션 관리\`
+제목 다음 줄부터 보고서 본문을 작성하세요.
+
 ## 기본 정보
-- 프로젝트: ${repoOwner}/${repoName}
+- 프로젝트: ${displayName}
 - ${periodLabel}: ${dateLabel}
 - 총 커밋: ${allCommits.length}건
 - 총 변경량: +${totalAdditions} / -${totalDeletions}
@@ -138,6 +145,23 @@ ${rule4}
 - 위 출력 형식의 섹션 구조와 이모지 헤더를 그대로 사용하세요`;
 }
 
+function parseGeneratedReport(text: string, displayName: string): { title: string; content: string } {
+  const lines = text.split("\n");
+  let title = `[${displayName}] 업무 보고서`;
+  let contentStartIndex = 0;
+
+  if (lines[0]?.startsWith("TITLE:")) {
+    title = `[${displayName}] ${lines[0].replace("TITLE:", "").trim()}`;
+    contentStartIndex = 1;
+    // 빈 줄 스킵
+    while (contentStartIndex < lines.length && lines[contentStartIndex].trim() === "") {
+      contentStartIndex++;
+    }
+  }
+
+  return { title, content: lines.slice(contentStartIndex).join("\n") };
+}
+
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -170,6 +194,7 @@ export async function POST(request: NextRequest) {
 
     const isRange = Boolean(dateRange);
     const dateLabel = isRange ? `${dateRange!.since} ~ ${dateRange!.until}` : date!;
+    const displayName = repo.label || `${repo.owner}/${repo.repo}`;
 
     if (asyncMode) {
       // 비동기 모드: pending 상태로 먼저 저장 후 백그라운드에서 생성
@@ -177,9 +202,9 @@ export async function POST(request: NextRequest) {
       const pendingId = insertReport(db, {
         userId: session.user.id,
         repositoryId: Number(repoId),
-        project: `${repo.owner}/${repo.repo}`,
+        project: displayName,
         date: reportDate,
-        title: `[${repo.owner}/${repo.repo}] ${dateLabel} 업무 보고서`,
+        title: `[${displayName}] 업무 보고서`,
         content: "",
         dateStart: isRange ? dateRange!.since : undefined,
         dateEnd: isRange ? dateRange!.until : undefined,
@@ -206,22 +231,21 @@ export async function POST(request: NextRequest) {
           }
 
           if (allCommits.length === 0) {
-            updateReportStatus(db, pendingId, "error", { title: `[${repo.owner}/${repo.repo}] ${dateLabel} 업무 보고서`, content: "해당 기간에 커밋이 없습니다." });
+            updateReportStatus(db, pendingId, "error", { title: `[${displayName}] 업무 보고서`, content: "해당 기간에 커밋이 없습니다." });
             return;
           }
 
-          const prompt = buildPrompt(repo.owner, repo.repo, dateLabel, allCommits, isRange);
+          const prompt = buildPrompt(repo.owner, repo.repo, repo.label, dateLabel, allCommits, isRange);
           const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
           const result = await genai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
           });
-          const content = result.text ?? "";
-          const title = `[${repo.owner}/${repo.repo}] ${dateLabel} 업무 보고서`;
-          updateReportStatus(db, pendingId, "completed", { title, content });
+          const parsed = parseGeneratedReport(result.text ?? "", displayName);
+          updateReportStatus(db, pendingId, "completed", parsed);
         } catch (err: any) {
           updateReportStatus(db, pendingId, "error", {
-            title: `[${repo.owner}/${repo.repo}] ${dateLabel} 업무 보고서`,
+            title: `[${displayName}] 업무 보고서`,
             content: err?.message ?? "보고서 생성 중 오류 발생",
           });
         }
@@ -250,7 +274,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "해당 기간에 커밋이 없습니다." }, { status: 400 });
     }
 
-    const prompt = buildPrompt(repo.owner, repo.repo, dateLabel, allCommits, isRange);
+    const prompt = buildPrompt(repo.owner, repo.repo, repo.label, dateLabel, allCommits, isRange);
 
     const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const result = await genai.models.generateContent({
@@ -258,19 +282,20 @@ export async function POST(request: NextRequest) {
       contents: prompt,
     });
 
-    const report = result.text ?? "";
+    const parsed = parseGeneratedReport(result.text ?? "", displayName);
     const totalAdditions = allCommits.reduce((s, c) => s + c.additions, 0);
     const totalDeletions = allCommits.reduce((s, c) => s + c.deletions, 0);
     const branchSet = [...new Set(allCommits.map((c) => c.branch))];
 
     return NextResponse.json({
-      title: `[${repo.owner}/${repo.repo}] ${dateLabel} 업무 보고서`,
-      content: report,
+      title: parsed.title,
+      content: parsed.content,
       meta: {
         totalCommits: allCommits.length,
         totalAdditions,
         totalDeletions,
         branches: branchSet,
+        date: dateLabel,
       },
     });
   } catch (error: any) {

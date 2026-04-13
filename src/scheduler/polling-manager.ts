@@ -11,7 +11,7 @@ import {
   type CacheCommit,
 } from "@/infra/db/repository";
 import { fetchRepoLanguage } from "@/infra/github/github-client";
-import { getCredentialByUserAndProvider } from "@/infra/db/credential";
+import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { pullRepository, getCommitsSince, getCommitDiff, getBranches, getCommitsForCache, cloneRepository, RepoNotFoundError } from "@/infra/git/git-client";
 import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/gemini/gemini-client";
 import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
@@ -68,7 +68,9 @@ async function enrichAmbiguousCommits(commits: CommitRecord[], repoPath: string)
 }
 
 async function recloneRepo(database: ReturnType<typeof getDb>, userId: string, repo: any): Promise<void> {
-  const gitCred = getCredentialByUserAndProvider(database, userId, "git");
+  const gitCred = repo.credential_id
+    ? getCredentialById(database, repo.credential_id)
+    : getCredentialByUserAndProvider(database, userId, "git");
   if (!gitCred) throw new Error("Git credential not found for re-clone");
   const token = decrypt(gitCred.credential);
   await mkdir(dirname(repo.clone_path), { recursive: true });
@@ -90,7 +92,11 @@ async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, r
 
   // language 갱신
   try {
-    const language = await fetchRepoLanguage(repo.owner, repo.repo);
+    const gitCred = repo.credential_id
+      ? getCredentialById(database, repo.credential_id)
+      : getCredentialByUserAndProvider(database, userId, "git");
+    const langToken = gitCred ? decrypt(gitCred.credential) : undefined;
+    const language = await fetchRepoLanguage(repo.owner, repo.repo, langToken);
     updatePrimaryLanguage(database, repo.id, language);
   } catch (langErr) {
     console.error(`[Scheduler] ${repo.owner}/${repo.repo}: language fetch failed -`, langErr);

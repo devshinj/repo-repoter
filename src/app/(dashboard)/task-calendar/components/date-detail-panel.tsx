@@ -22,6 +22,7 @@ interface RepoDateDetail {
   repoId: number;
   repoName: string;
   owner: string;
+  label: string | null;
   branches: {
     branch: string;
     commits: { sha: string; message: string; author: string; date: string }[];
@@ -47,6 +48,8 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
   const [reportGenerating, setReportGenerating] = useState(false);
   const [reportSaving, setReportSaving] = useState(false);
   const [reportViewMode, setReportViewMode] = useState<"edit" | "preview">("edit");
+  const [showDateInTitle, setShowDateInTitle] = useState(false);
+  const [reportDate, setReportDate] = useState("");
 
   useEffect(() => {
     setExpandedBranches(new Set());
@@ -63,9 +66,12 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
 
   async function openReport(repo: RepoDateDetail) {
     setReportRepo(repo);
-    setReportTitle(`[${repo.owner}/${repo.repoName}] ${selectedDate} 업무 보고서`);
+    const displayName = repo.label || `${repo.owner}/${repo.repoName}`;
+    setReportTitle(`[${displayName}] 업무 보고서`);
     setReportContent("");
     setReportGenerating(true);
+    setShowDateInTitle(false);
+    setReportDate(selectedDate);
 
     try {
       const res = await fetch("/api/reports/generate", {
@@ -77,6 +83,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
       if (res.ok) {
         setReportTitle(data.title);
         setReportContent(data.content);
+        if (data.meta?.date) setReportDate(data.meta.date);
       } else {
         toast.error(data.error || "보고서 생성 실패");
         setReportContent("보고서 생성에 실패했습니다. 직접 작성해주세요.");
@@ -94,13 +101,19 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     setReportTitle("");
     setReportContent("");
     setReportViewMode("edit");
+    setShowDateInTitle(false);
+    setReportDate("");
+  }
+
+  function getFinalTitle() {
+    return showDateInTitle && reportDate ? `${reportTitle} (${reportDate})` : reportTitle;
   }
 
   async function handleCopyReport() {
     if (!reportContent.trim()) { toast.error("보고서 내용이 없습니다"); return; }
     setReportSaving(true);
     try {
-      await navigator.clipboard.writeText(`# ${reportTitle}\n\n${reportContent}`);
+      await navigator.clipboard.writeText(`# ${getFinalTitle()}\n\n${reportContent}`);
       toast.success("보고서가 클립보드에 복사되었습니다");
     } catch { toast.error("클립보드 복사에 실패했습니다"); }
     finally { setReportSaving(false); }
@@ -115,9 +128,9 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repositoryId: reportRepo.repoId,
-          project: `${reportRepo.owner}/${reportRepo.repoName}`,
+          project: reportRepo.label || `${reportRepo.owner}/${reportRepo.repoName}`,
           date: selectedDate,
-          title: reportTitle,
+          title: getFinalTitle(),
           content: reportContent,
         }),
       });
@@ -154,7 +167,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
                     >
                       <FolderGit2 className="h-3 w-3" style={{ color: oklch(color.solid) }} />
                     </div>
-                    <span className="font-medium text-sm">{repo.owner}/{repo.repoName}</span>
+                    <span className="font-medium text-sm">{repo.label || `${repo.owner}/${repo.repoName}`}</span>
                     <Badge
                       variant="secondary"
                       className="text-[10px] px-1.5 py-0"
@@ -234,7 +247,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
               <Badge variant="outline">{selectedDate}</Badge>
               {reportRepo && (
                 <span className="flex items-center gap-1">
-                  <FolderGit2 className="h-3.5 w-3.5" />{reportRepo.owner}/{reportRepo.repoName}
+                  <FolderGit2 className="h-3.5 w-3.5" />{reportRepo.label || `${reportRepo.owner}/${reportRepo.repoName}`}
                 </span>
               )}
             </div>
@@ -261,8 +274,28 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
             ) : (
               <>
                 <div>
-                  <label className="text-sm font-medium">제목</label>
-                  <Input value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm font-medium">제목</label>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showDateInTitle}
+                        onChange={(e) => setShowDateInTitle(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-input accent-primary cursor-pointer"
+                      />
+                      <span className="text-[11px] text-muted-foreground">날짜 포함</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      className="flex-1"
+                      value={reportTitle}
+                      onChange={(e) => setReportTitle(e.target.value)}
+                    />
+                    {showDateInTitle && reportDate && (
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">({reportDate})</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1.5">
@@ -324,7 +357,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                <span className="font-medium text-foreground">{confirmRepo?.owner}/{confirmRepo?.repoName}</span>
+                <span className="font-medium text-foreground">{confirmRepo?.label || `${confirmRepo?.owner}/${confirmRepo?.repoName}`}</span>
                 {" "}저장소의{" "}
                 <span className="font-medium text-foreground">{selectedDate}</span>
                 {" "}커밋 데이터를 기반으로 AI 업무 보고서를 생성합니다.

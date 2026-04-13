@@ -8,12 +8,14 @@ import {
   deleteRepositoryForUser,
   getRepositoryByIdAndUser,
   updateGitAuthor,
+  updateLabel,
+  updateCloneStatus,
   updatePrimaryLanguage,
   insertCommitCache,
   type CacheCommit,
 } from "@/infra/db/repository";
 import { fetchRepoLanguage } from "@/infra/github/github-client";
-import { getCredentialByUserAndProvider } from "@/infra/db/credential";
+import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { parseGitUrl } from "@/infra/git/parse-git-url";
 import { cloneRepository, getBranches, getCommitsForCache } from "@/infra/git/git-client";
@@ -25,7 +27,8 @@ async function registerSingleRepo(
   userId: string,
   token: string,
   cloneUrl: string,
-  branch: string
+  branch: string,
+  credentialId?: number
 ): Promise<{ success: boolean; error?: string; cloneUrl: string }> {
   let parsed;
   try {
@@ -44,27 +47,31 @@ async function registerSingleRepo(
       repo: parsed.repo,
       branch,
       cloneUrl,
+      credentialId,
     });
 
     const repoRow = db.prepare(
       "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
     ).get(userId, cloneUrl) as any;
 
-    db.prepare("UPDATE repositories SET clone_path = ? WHERE id = ?").run(clonePath, repoRow.id);
+    updateCloneStatus(db, repoRow.id, "cloning");
 
     // clone은 백그라운드로 실행
     (async () => {
       try {
         await mkdir(join(process.cwd(), "data", "repos", userId, parsed!.owner), { recursive: true });
         await cloneRepository(cloneUrl, clonePath, token);
+        db.prepare("UPDATE repositories SET clone_path = ? WHERE id = ?").run(clonePath, repoRow.id);
         console.log(`[Repos] Cloned ${cloneUrl} to ${clonePath}`);
 
         try {
-          const language = await fetchRepoLanguage(parsed!.owner, parsed!.repo);
+          const language = await fetchRepoLanguage(parsed!.owner, parsed!.repo, token);
           updatePrimaryLanguage(db, repoRow.id, language);
         } catch (langErr) {
           console.error(`[Repos] Language fetch failed for ${cloneUrl}:`, langErr);
         }
+
+        updateCloneStatus(db, repoRow.id, "caching");
 
         try {
           const branches = await getBranches(clonePath);
@@ -85,8 +92,11 @@ async function registerSingleRepo(
         } catch (cacheErr) {
           console.error(`[Repos] Cache build failed for ${cloneUrl}:`, cacheErr);
         }
+
+        updateCloneStatus(db, repoRow.id, "ready");
       } catch (err) {
         console.error(`[Repos] Failed to clone ${cloneUrl}:`, err);
+        updateCloneStatus(db, repoRow.id, "error");
       }
     })();
 
@@ -115,8 +125,19 @@ export async function POST(request: NextRequest) {
   const userId = session.user.id;
   const db = getDb();
 
-  // Git PAT 확인
-  const gitCred = getCredentialByUserAndProvider(db, userId, "git");
+  // credentialId가 명시되면 해당 credential 사용, 없으면 기존 방식 (첫 번째 git credential)
+  const credentialId = body.credentialId ? Number(body.credentialId) : undefined;
+
+  let gitCred: any;
+  if (credentialId) {
+    gitCred = getCredentialById(db, credentialId);
+    if (!gitCred || gitCred.user_id !== userId) {
+      return NextResponse.json({ error: "Credential not found" }, { status: 404 });
+    }
+  } else {
+    gitCred = getCredentialByUserAndProvider(db, userId, "git");
+  }
+
   if (!gitCred) {
     return NextResponse.json({ error: "Git PAT이 등록되지 않았습니다. 설정에서 먼저 등록하세요." }, { status: 400 });
   }
@@ -126,7 +147,7 @@ export async function POST(request: NextRequest) {
   if (Array.isArray(body.repositories)) {
     const results = [];
     for (const item of body.repositories) {
-      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main");
+      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main", credentialId ?? gitCred.id);
       results.push(result);
     }
     const succeeded = results.filter(r => r.success).length;
@@ -143,7 +164,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "cloneUrl is required" }, { status: 400 });
   }
 
-  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch);
+  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch, credentialId ?? gitCred.id);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -156,11 +177,27 @@ export async function PATCH(request: NextRequest) {
   const userId = session.user.id;
 
   const body = await request.json();
-  const { id, gitAuthor } = body as { id: number; gitAuthor?: string };
+  const { id, gitAuthor, label, isActive } = body as { id: number; gitAuthor?: string; label?: string; isActive?: boolean };
 
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
   const db = getDb();
+
+  if (isActive !== undefined) {
+    const repo = getRepositoryByIdAndUser(db, id, userId);
+    if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+    db.prepare(
+      "UPDATE repositories SET is_active = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+    ).run(isActive ? 1 : 0, id, userId);
+    return NextResponse.json({ message: "Updated" });
+  }
+
+  if (label !== undefined) {
+    const updated = updateLabel(db, id, userId, label.trim() || null);
+    if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+    return NextResponse.json({ message: "Updated" });
+  }
+
   const updated = updateGitAuthor(db, id, userId, gitAuthor?.trim() || null);
   if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
   return NextResponse.json({ message: "Updated" });

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeft, CalendarDays, ClipboardCopy, FolderGit2, Pencil, Save, X } from "lucide-react";
 import { projectColor, oklch } from "@/lib/color-hash";
+import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
 
 interface Report {
   id: number;
@@ -37,6 +38,7 @@ export default function ReportDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     fetch(`/api/reports/${reportId}`)
@@ -78,8 +80,7 @@ export default function ReportDetailPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm("이 보고서를 삭제하시겠습니까?")) return;
+  async function handleDeleteConfirm() {
     const res = await fetch(`/api/reports/${reportId}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("보고서가 삭제되었습니다");
@@ -117,7 +118,7 @@ export default function ReportDetailPage() {
               <>
                 <Button variant="outline" size="sm" onClick={() => router.push("/reports")}><ArrowLeft className="h-4 w-4 mr-1" />목록</Button>
                 <Button variant="outline" size="sm" onClick={startEdit}><Pencil className="h-4 w-4 mr-1" />수정</Button>
-                <Button variant="destructive" size="sm" onClick={handleDelete}>삭제</Button>
+                <Button variant="destructive" size="sm" onClick={() => setShowDeleteConfirm(true)}>삭제</Button>
               </>
             )}
           </div>
@@ -126,7 +127,8 @@ export default function ReportDetailPage() {
 
       {/* 메타 정보 */}
       {(() => {
-        const projColor = projectColor(report.project);
+        const colorKey = report.owner && report.repo ? `${report.owner}/${report.repo}` : report.project;
+        const projColor = projectColor(colorKey);
         const isRange = report.date_start && report.date_end && report.date_start !== report.date_end;
         const dateLabel = isRange ? `${report.date_start} ~ ${report.date_end}` : report.date;
         return (
@@ -201,6 +203,14 @@ export default function ReportDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="보고서 삭제"
+        description="이 보고서를 삭제하시겠습니까? 삭제된 보고서는 복구할 수 없습니다."
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }

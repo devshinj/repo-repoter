@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { GitBranch, Plus, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
+import { GitProviderIcon } from "@/components/data-display/git-provider-icon";
 
 interface Credential {
   id: number;
@@ -47,8 +49,10 @@ export default function SettingsPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newToken, setNewToken] = useState("");
   const [saving, setSaving] = useState(false);
-  const [newServiceType, setNewServiceType] = useState<"github" | "gitea">("github");
+  const [newServiceType, setNewServiceType] = useState<"github" | "gitea" | "gitlab" | "bitbucket">("github");
   const [newHost, setNewHost] = useState("");
+
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
   const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
   const [editingLabelValue, setEditingLabelValue] = useState("");
@@ -68,14 +72,22 @@ export default function SettingsPage() {
       toast.error("라벨과 토큰을 모두 입력하세요");
       return;
     }
-    if (newServiceType === "gitea" && !newHost) {
-      toast.error("Gitea 호스트 URL을 입력하세요");
+    const needsHost = newServiceType !== "github";
+    if (needsHost && !newHost) {
+      toast.error("호스트 URL을 입력하세요");
       return;
     }
 
-    const metadata = newServiceType === "github"
-      ? { type: "github", host: "github.com", apiBase: "https://api.github.com" }
-      : { type: "gitea", host: newHost, apiBase: `https://${newHost}/api/v1` };
+    const hostNormalized = newHost.replace(/\/+$/, "");
+    const baseUrl = /^https?:\/\//.test(hostNormalized) ? hostNormalized : `https://${hostNormalized}`;
+
+    const metadataByType = {
+      github: { type: "github", host: "github.com", apiBase: "https://api.github.com" },
+      gitea: { type: "gitea", host: hostNormalized, apiBase: `${baseUrl}/api/v1` },
+      gitlab: { type: "gitlab", host: hostNormalized, apiBase: `${baseUrl}/api/v4` },
+      bitbucket: { type: "bitbucket", host: hostNormalized, apiBase: `${baseUrl}/2.0` },
+    } as const;
+    const metadata = metadataByType[newServiceType];
 
     setSaving(true);
     try {
@@ -136,9 +148,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("이 자격증명을 삭제하시겠습니까?")) return;
-    const res = await fetch(`/api/credentials/${id}`, { method: "DELETE" });
+  const handleDeleteConfirm = async () => {
+    if (deleteTarget === null) return;
+    const res = await fetch(`/api/credentials/${deleteTarget}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("자격증명이 삭제되었습니다");
       fetchCredentials();
@@ -182,6 +194,17 @@ export default function SettingsPage() {
                     <input
                       type="radio"
                       name="serviceType"
+                      value="gitlab"
+                      checked={newServiceType === "gitlab"}
+                      onChange={() => { setNewServiceType("gitlab"); setNewHost("gitlab.com"); }}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm">GitLab</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceType"
                       value="gitea"
                       checked={newServiceType === "gitea"}
                       onChange={() => setNewServiceType("gitea")}
@@ -189,17 +212,28 @@ export default function SettingsPage() {
                     />
                     <span className="text-sm">Gitea / 기타</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceType"
+                      value="bitbucket"
+                      checked={newServiceType === "bitbucket"}
+                      onChange={() => { setNewServiceType("bitbucket"); setNewHost("bitbucket.org"); }}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm">Bitbucket</span>
+                  </label>
                 </div>
               </div>
-              {newServiceType === "gitea" && (
+              {newServiceType !== "github" && (
                 <div>
                   <label className="text-sm font-medium">호스트 URL</label>
                   <Input
-                    placeholder="gitea.example.com"
+                    placeholder={{ gitlab: "gitlab.com", gitea: "gitea.example.com", bitbucket: "bitbucket.org" }[newServiceType]}
                     value={newHost}
                     onChange={(e) => setNewHost(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">프로토콜 없이 호스트명만 입력 (예: gitea.company.com)</p>
+                  <p className="text-xs text-muted-foreground mt-1">호스트명만 입력하세요. 사용자명이나 경로는 제외 (예: {{ gitlab: "gitlab.com ✓ / gitlab.com/username ✗", gitea: "gitea.company.com", bitbucket: "bitbucket.org" }[newServiceType]})</p>
                 </div>
               )}
               <div>
@@ -232,62 +266,68 @@ export default function SettingsPage() {
               <GitBranch className="h-4 w-4" />
               Git Personal Access Tokens
             </h3>
-            {gitCredentials.map((cred) => (
+            {gitCredentials.map((cred) => {
+              const providerType = cred.metadata?.type || "git";
+              return (
               <Card key={cred.id}>
                 <CardContent className="pt-6 space-y-4">
-                  <div className="space-y-1">
-                    {editingLabelId === cred.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={editingLabelValue}
-                          onChange={(e) => setEditingLabelValue(e.target.value)}
-                          className="h-8 max-w-xs"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleUpdateLabel(cred.id);
-                            if (e.key === "Escape") setEditingLabelId(null);
-                          }}
-                          autoFocus
-                        />
-                        <Button size="sm" onClick={() => handleUpdateLabel(cred.id)}>저장</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingLabelId(null)}>취소</Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{cred.label || "(라벨 없음)"}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {cred.metadata?.type === "gitea" ? `Gitea — ${cred.metadata.host}` : "GitHub"}
-                        </Badge>
-                      </div>
-                    )}
-
-                    <div className="text-sm text-muted-foreground truncate">
-                      토큰: <code className="bg-muted px-1 rounded">{cred.maskedToken}</code>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <GitProviderIcon type={providerType} className="h-8 w-8 text-muted-foreground" />
                     </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      {editingLabelId === cred.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingLabelValue}
+                            onChange={(e) => setEditingLabelValue(e.target.value)}
+                            className="h-8 max-w-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleUpdateLabel(cred.id);
+                              if (e.key === "Escape") setEditingLabelId(null);
+                            }}
+                            autoFocus
+                          />
+                          <Button size="sm" onClick={() => handleUpdateLabel(cred.id)}>저장</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingLabelId(null)}>취소</Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{cred.label || "(라벨 없음)"}</span>
+                          {providerType === "gitea" && cred.metadata?.host && (
+                            <Badge variant="secondary" className="text-xs">{cred.metadata.host}</Badge>
+                          )}
+                        </div>
+                      )}
 
-                    <div className="text-xs text-muted-foreground">
-                      등록: {new Date(cred.createdAt).toLocaleDateString("ko-KR")}
-                      {cred.updatedAt !== cred.createdAt && (
-                        <> · 갱신: {new Date(cred.updatedAt).toLocaleDateString("ko-KR")}</>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">{cred.maskedToken}</code>
+                        <span>
+                          등록 {new Date(cred.createdAt).toLocaleDateString("ko-KR")}
+                          {cred.updatedAt !== cred.createdAt && (
+                            <> · 갱신 {new Date(cred.updatedAt).toLocaleDateString("ko-KR")}</>
+                          )}
+                        </span>
+                      </div>
+
+                      {renewingTokenId === cred.id && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Input
+                            type="password"
+                            placeholder={providerPresets.git.placeholder}
+                            value={renewTokenValue}
+                            onChange={(e) => setRenewTokenValue(e.target.value)}
+                            className="h-8 max-w-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRenewToken(cred.id);
+                              if (e.key === "Escape") { setRenewingTokenId(null); setRenewTokenValue(""); }
+                            }}
+                          />
+                          <Button size="sm" onClick={() => handleRenewToken(cred.id)}>저장</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setRenewingTokenId(null); setRenewTokenValue(""); }}>취소</Button>
+                        </div>
                       )}
                     </div>
-
-                    {renewingTokenId === cred.id && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Input
-                          type="password"
-                          placeholder={providerPresets.git.placeholder}
-                          value={renewTokenValue}
-                          onChange={(e) => setRenewTokenValue(e.target.value)}
-                          className="h-8 max-w-xs"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleRenewToken(cred.id);
-                            if (e.key === "Escape") { setRenewingTokenId(null); setRenewTokenValue(""); }
-                          }}
-                        />
-                        <Button size="sm" onClick={() => handleRenewToken(cred.id)}>저장</Button>
-                        <Button size="sm" variant="ghost" onClick={() => { setRenewingTokenId(null); setRenewTokenValue(""); }}>취소</Button>
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-2 border-t pt-3">
@@ -314,7 +354,7 @@ export default function SettingsPage() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleDelete(cred.id)}
+                      onClick={() => setDeleteTarget(cred.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1" />
                       삭제
@@ -322,7 +362,8 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -334,6 +375,14 @@ export default function SettingsPage() {
           </Card>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="자격증명 삭제"
+        description="이 자격증명을 삭제하시겠습니까? 이 자격증명을 사용하는 저장소의 동기화가 중단될 수 있습니다."
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }

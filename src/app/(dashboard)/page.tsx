@@ -116,23 +116,35 @@ function getGreeting(): string {
   return "👋 수고하셨어요";
 }
 
+interface DashboardStats {
+  todayCommits: number;
+  weekCommits: number;
+  totalReports: number;
+  repoCount: number;
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const userName = session?.user?.name;
   const [repos, setRepos] = useState<any[]>([]);
   const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats>({ todayCommits: 0, weekCommits: 0, totalReports: 0, repoCount: 0 });
   const [syncing, setSyncing] = useState(false);
   const [syncingRepoId, setSyncingRepoId] = useState<number | null>(null);
   const [heatmapData, setHeatmapData] = useState<Record<string, number>>({});
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const refreshData = useCallback(() => {
-    fetch("/api/repos").then((r) => r.json()).then(setRepos);
-    fetch("/api/cron").then((r) => r.json()).then(setSchedulerStatus);
-    fetch("/api/commits/heatmap?months=6").then((r) => r.json()).then((d) => setHeatmapData(d.data || {}));
+    return Promise.all([
+      fetch("/api/repos").then((r) => r.json()).then(setRepos),
+      fetch("/api/cron").then((r) => r.json()).then(setSchedulerStatus),
+      fetch("/api/commits/heatmap?months=6").then((r) => r.json()).then((d) => setHeatmapData(d.data || {})),
+      fetch("/api/dashboard/stats").then((r) => r.json()).then(setStats),
+    ]);
   }, []);
 
   useEffect(() => {
-    refreshData();
+    refreshData().finally(() => setInitialLoading(false));
     const onVisible = () => {
       if (document.visibilityState === "visible") refreshData();
     };
@@ -183,37 +195,56 @@ export default function DashboardPage() {
   const scheduler = getSchedulerState(schedulerStatus);
   const styles = schedulerStateStyles[scheduler.state];
 
+  if (initialLoading) {
+    return (
+      <div className="animate-pulse space-y-6">
+        <div className="space-y-2">
+          <div className="h-8 w-64 bg-muted rounded" />
+          <div className="h-4 w-48 bg-muted rounded" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 bg-muted rounded-lg" />
+          ))}
+        </div>
+        <div className="h-32 bg-muted rounded-lg" />
+        <div className="h-48 bg-muted rounded-lg" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <Header
         title={userName ? `${getGreeting()}, ${userName}님` : "대시보드"}
         description="Git 커밋 모니터링 현황"
         actions={
-          <Button onClick={handleSync} disabled={syncing}>
-            {syncing ? "동기화 중..." : "지금 동기화"}
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 border border-border" title={scheduler.description || undefined}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${styles.dot}`} />
+              <span className={`text-sm font-medium ${styles.text}`}>{scheduler.label}</span>
+              {lastSync && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-xs text-muted-foreground" title={lastSync.detail}>
+                    {lastSync.relative}
+                  </span>
+                </>
+              )}
+            </div>
+            <Button onClick={handleSync} disabled={syncing} size="sm">
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "동기화 중..." : "지금 동기화"}
+            </Button>
+          </div>
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <StatCard label="등록된 저장소" value={repos.length} />
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm font-medium text-muted-foreground">스케줄러</p>
-            <div className="flex items-center gap-2 mt-1">
-              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${styles.dot}`} />
-              <p className={`text-lg font-semibold ${styles.text}`}>{scheduler.label}</p>
-            </div>
-            {scheduler.description && (
-              <p className="text-sm text-muted-foreground mt-1">{scheduler.description}</p>
-            )}
-          </CardContent>
-        </Card>
-        <StatCard
-          label="마지막 동기화"
-          value={lastSync?.relative ?? "없음"}
-          description={lastSync?.detail}
-        />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <StatCard label="오늘 커밋" value={stats.todayCommits} />
+        <StatCard label="이번 주 커밋" value={stats.weekCommits} description="최근 7일" />
+        <StatCard label="생성된 리포트" value={stats.totalReports} />
+        <StatCard label="등록 저장소" value={stats.repoCount} />
       </div>
 
       <div className="mb-6">
@@ -241,9 +272,12 @@ export default function DashboardPage() {
                       <DotIdenticon value={`${repo.owner}/${repo.repo}`} size={32} colorSet={repoColor(repo.clone_url)} className="flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium">{repo.owner}/{repo.repo}</p>
+                          <p className="font-medium">{repo.label || `${repo.owner}/${repo.repo}`}</p>
                           <LanguageBadge language={repo.primary_language} />
                         </div>
+                        {repo.label && (
+                          <p className="text-xs text-muted-foreground">{repo.owner}/{repo.repo}</p>
+                        )}
                         {repo.last_commit_message ? (
                           <p className="text-sm text-muted-foreground truncate max-w-md" title={repo.last_commit_message}>
                             {repo.last_commit_message}

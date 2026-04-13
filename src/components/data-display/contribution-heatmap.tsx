@@ -211,81 +211,83 @@ export function ContributionHeatmap({ data, months = 6 }: ContributionHeatmapPro
         </div>
 
         {/* SVG Heatmap */}
-        <div ref={containerRef} className="w-full overflow-x-auto relative">
-          {containerWidth > 0 && (
-            <svg
-              ref={svgRef}
-              width={svgWidth}
-              height={svgHeight}
-              className="block"
-              role="img"
-              aria-label="커밋 히트맵"
-              onMouseLeave={handleCellLeave}
-            >
-              {/* Month labels */}
-              {monthLabels.map((m, idx) => (
-                <text
-                  key={idx}
-                  x={labelWidth + m.weekIndex * (cellSize + gap)}
-                  y={12}
-                  className="fill-muted-foreground"
-                  fontSize={10}
-                  fontWeight={500}
-                  fontFamily="system-ui, sans-serif"
-                >
-                  {m.label}
-                </text>
-              ))}
+        <div className="relative">
+          <div ref={containerRef} className="w-full overflow-x-auto">
+            {containerWidth > 0 && (
+              <svg
+                ref={svgRef}
+                width={svgWidth}
+                height={svgHeight}
+                className="block"
+                role="img"
+                aria-label="커밋 히트맵"
+                onMouseLeave={handleCellLeave}
+              >
+                {/* Month labels */}
+                {monthLabels.map((m, idx) => (
+                  <text
+                    key={idx}
+                    x={labelWidth + m.weekIndex * (cellSize + gap)}
+                    y={12}
+                    className="fill-muted-foreground"
+                    fontSize={10}
+                    fontWeight={500}
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {m.label}
+                  </text>
+                ))}
 
-              {/* Day labels */}
-              {dayLabels.map(([dayIdx, label]) => (
-                <text
-                  key={dayIdx}
-                  x={labelWidth - 5}
-                  y={monthLabelHeight + dayIdx * (cellSize + gap) + cellSize - 2}
-                  className="fill-muted-foreground/70"
-                  fontSize={9}
-                  fontFamily="system-ui, sans-serif"
-                  textAnchor="end"
-                >
-                  {label}
-                </text>
-              ))}
+                {/* Day labels */}
+                {dayLabels.map(([dayIdx, label]) => (
+                  <text
+                    key={dayIdx}
+                    x={labelWidth - 5}
+                    y={monthLabelHeight + dayIdx * (cellSize + gap) + cellSize - 2}
+                    className="fill-muted-foreground/70"
+                    fontSize={9}
+                    fontFamily="system-ui, sans-serif"
+                    textAnchor="end"
+                  >
+                    {label}
+                  </text>
+                ))}
 
-              {/* Cells */}
-              {weeks.map((week, weekIdx) =>
-                week.map((cell, dayIdx) => {
-                  if (!cell) return null;
-                  const level = getLevel(cell.count);
-                  const x = labelWidth + weekIdx * (cellSize + gap);
-                  const y = monthLabelHeight + dayIdx * (cellSize + gap);
-                  const isHovered = hoveredCell?.dateStr === cell.dateStr;
-                  return (
-                    <rect
-                      key={`${weekIdx}-${dayIdx}`}
-                      x={x}
-                      y={y}
-                      width={cellSize}
-                      height={cellSize}
-                      rx={2.5}
-                      ry={2.5}
-                      fill={colors[level]}
-                      stroke={isHovered ? (isDark ? "oklch(0.85 0 0)" : "oklch(0.35 0 0)") : "none"}
-                      strokeWidth={isHovered ? 1.5 : 0}
-                      className="outline-none transition-opacity duration-75"
-                      style={{ cursor: cell.count > 0 ? "pointer" : "default" }}
-                      onMouseEnter={() => handleCellEnter(cell, x, y)}
-                    />
-                  );
-                })
-              )}
-            </svg>
-          )}
+                {/* Cells */}
+                {weeks.map((week, weekIdx) =>
+                  week.map((cell, dayIdx) => {
+                    if (!cell) return null;
+                    const level = getLevel(cell.count);
+                    const x = labelWidth + weekIdx * (cellSize + gap);
+                    const y = monthLabelHeight + dayIdx * (cellSize + gap);
+                    const isHovered = hoveredCell?.dateStr === cell.dateStr;
+                    return (
+                      <rect
+                        key={`${weekIdx}-${dayIdx}`}
+                        x={x}
+                        y={y}
+                        width={cellSize}
+                        height={cellSize}
+                        rx={2.5}
+                        ry={2.5}
+                        fill={colors[level]}
+                        stroke={isHovered ? (isDark ? "oklch(0.85 0 0)" : "oklch(0.35 0 0)") : "none"}
+                        strokeWidth={isHovered ? 1.5 : 0}
+                        className="outline-none transition-opacity duration-75"
+                        style={{ cursor: cell.count > 0 ? "pointer" : "default" }}
+                        onMouseEnter={() => handleCellEnter(cell, x, y)}
+                      />
+                    );
+                  })
+                )}
+              </svg>
+            )}
+          </div>
 
-          {/* Tooltip */}
+          {/* Tooltip — overflow 컨테이너 바깥에 배치하여 잘리지 않도록 함 */}
           {hoveredCell && (
             <div
-              className="absolute z-10 pointer-events-none px-2.5 py-1.5 rounded-md bg-popover text-popover-foreground text-xs shadow-md border border-border whitespace-nowrap"
+              className="absolute z-50 pointer-events-none px-2.5 py-1.5 rounded-md bg-popover text-popover-foreground text-xs shadow-md border border-border whitespace-nowrap"
               style={{
                 left: hoveredCell.x + cellSize / 2,
                 top: hoveredCell.y - 6,

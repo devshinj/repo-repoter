@@ -12,6 +12,7 @@ interface Repo {
   id: number;
   owner: string;
   repo: string;
+  label?: string | null;
 }
 
 interface RepoFilterProps {
@@ -66,7 +67,7 @@ export function RepoFilter({ repos, selectedIds, onSelectionChange }: RepoFilter
                   className="text-[10px] px-1.5 py-0 font-normal"
                   style={{ backgroundColor: oklch(color.bgLight), color: oklch(color.solid) }}
                 >
-                  {r.repo}
+                  {r.label || r.repo}
                 </Badge>
               );
             })}
@@ -96,7 +97,7 @@ export function RepoFilter({ repos, selectedIds, onSelectionChange }: RepoFilter
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: oklch(color.solid) }}
                   />
-                  <span className="text-xs">{repo.owner}/{repo.repo}</span>
+                  <span className="text-xs">{repo.label || `${repo.owner}/${repo.repo}`}</span>
                 </CommandItem>
               );
             })}

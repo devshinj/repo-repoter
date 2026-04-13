@@ -1,7 +1,7 @@
 // src/infra/git/git-client.ts
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { access } from "fs/promises";
+import { access, rm } from "fs/promises";
 import type { CommitRecord } from "@/core/types";
 import { buildAuthenticatedUrl, parseGitUrl } from "@/infra/git/parse-git-url";
 
@@ -25,6 +25,12 @@ async function assertRepoExists(repoPath: string): Promise<void> {
 const logFormat = "--format=%H%n%an%n%aI%n%s%n---END---";
 
 export async function cloneRepository(cloneUrl: string, destPath: string, token: string): Promise<void> {
+  // 이전 실패로 남은 디렉토리가 있으면 제거
+  try {
+    await access(destPath);
+    await rm(destPath, { recursive: true, force: true });
+  } catch { /* 디렉토리 없으면 무시 */ }
+
   const authUrl = buildAuthenticatedUrl(cloneUrl, token);
   await execFileAsync("git", ["clone", "--bare", authUrl, destPath], { timeout: 120_000 });
   // bare clone은 fetch refspec이 없으므로 수동 추가

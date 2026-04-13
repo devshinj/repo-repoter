@@ -118,6 +118,7 @@ interface InsertRepoForUserInput {
   repo: string;
   branch: string;
   cloneUrl: string;
+  credentialId?: number;
 }
 
 interface InsertSyncLogForUserInput {
@@ -131,8 +132,8 @@ interface InsertSyncLogForUserInput {
 
 export function insertRepositoryForUser(db: Database.Database, input: InsertRepoForUserInput): void {
   db.prepare(
-    "INSERT INTO repositories (owner, repo, branch, user_id, clone_url) VALUES (?, ?, ?, ?, ?)"
-  ).run(input.owner, input.repo, input.branch, input.userId, input.cloneUrl);
+    "INSERT INTO repositories (owner, repo, branch, user_id, clone_url, credential_id) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(input.owner, input.repo, input.branch, input.userId, input.cloneUrl, input.credentialId ?? null);
 }
 
 export function getRepositoriesByUser(db: Database.Database, userId: string) {
@@ -188,6 +189,19 @@ export function updateGitAuthor(db: Database.Database, id: number, userId: strin
   const result = db.prepare(
     "UPDATE repositories SET git_author = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
   ).run(gitAuthor, id, userId);
+  return result.changes > 0;
+}
+
+export function updateCloneStatus(db: Database.Database, id: number, status: string): void {
+  db.prepare(
+    "UPDATE repositories SET clone_status = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(status, id);
+}
+
+export function updateLabel(db: Database.Database, id: number, userId: string, label: string | null): boolean {
+  const result = db.prepare(
+    "UPDATE repositories SET label = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+  ).run(label, id, userId);
   return result.changes > 0;
 }
 
@@ -393,4 +407,51 @@ export function getCommitsByDate(
   authors?: string[]
 ): CacheCommit[] {
   return getCommitsByDateRange(db, repoIds, date, date, authors);
+}
+
+export interface DashboardStats {
+  todayCommits: number;
+  weekCommits: number;
+  totalReports: number;
+  repoCount: number;
+}
+
+export function getDashboardStats(db: Database.Database, userId: string): DashboardStats {
+  const repos = getRepositoriesByUser(db, userId);
+  const repoIds = repos.map((r: any) => r.id);
+
+  const today = new Date().toISOString().split("T")[0];
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  const weekStart = weekAgo.toISOString().split("T")[0];
+
+  const allAuthors: string[] = [];
+  for (const repo of repos) {
+    if (repo.git_author) {
+      const authors = repo.git_author.split(",").map((a: string) => a.trim()).filter(Boolean);
+      allAuthors.push(...authors);
+    }
+  }
+  const authorsParam = allAuthors.length > 0 ? allAuthors : undefined;
+
+  const todayCounts = repoIds.length > 0
+    ? getCommitCountsByDateRange(db, repoIds, today, today, authorsParam)
+    : {};
+  const todayCommits = Object.values(todayCounts).reduce((sum, n) => sum + n, 0);
+
+  const weekCounts = repoIds.length > 0
+    ? getCommitCountsByDateRange(db, repoIds, weekStart, today, authorsParam)
+    : {};
+  const weekCommits = Object.values(weekCounts).reduce((sum, n) => sum + n, 0);
+
+  const reportRow = db.prepare(
+    "SELECT COUNT(*) as cnt FROM reports WHERE user_id = ?"
+  ).get(userId) as { cnt: number };
+
+  return {
+    todayCommits,
+    weekCommits,
+    totalReports: reportRow.cnt,
+    repoCount: repos.length,
+  };
 }

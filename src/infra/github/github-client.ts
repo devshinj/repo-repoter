@@ -69,9 +69,9 @@ export function buildCommitRecords(
   });
 }
 
-export async function fetchRepoLanguage(owner: string, repo: string): Promise<string | null> {
+export async function fetchRepoLanguage(owner: string, repo: string, token?: string): Promise<string | null> {
   try {
-    const client = getOctokit();
+    const client = token ? new Octokit({ auth: token }) : getOctokit();
     const { data } = await client.rest.repos.get({ owner, repo });
     return data.language ?? null;
   } catch {

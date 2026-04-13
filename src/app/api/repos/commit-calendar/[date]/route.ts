@@ -30,7 +30,7 @@ function groupByRepo(commits: CacheCommit[], repos: any[]) {
         })),
       });
     }
-    result.push({ repoId, repoName: repo.repo, owner: repo.owner, branches });
+    result.push({ repoId, repoName: repo.repo, owner: repo.owner, label: repo.label || null, branches });
   }
 
   return result;

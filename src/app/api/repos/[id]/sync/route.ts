@@ -2,10 +2,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { mkdir } from "fs/promises";
 import { dirname } from "path";
-import { getRepositoryByIdAndUser, updateLastSyncedSha, insertSyncLogForUser } from "@/infra/db/repository";
-import { getCredentialByUserAndProvider } from "@/infra/db/credential";
+import { getRepositoryByIdAndUser, updateLastSyncedSha, insertSyncLogForUser, getLatestCacheDate, insertCommitCache, updatePrimaryLanguage, type CacheCommit } from "@/infra/db/repository";
+import { fetchRepoLanguage } from "@/infra/github/github-client";
+import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { pullRepository, getCommitsSince, getCommitDiff, cloneRepository, RepoNotFoundError } from "@/infra/git/git-client";
+import { pullRepository, getCommitsSince, getCommitDiff, cloneRepository, getBranches, getCommitsForCache, RepoNotFoundError } from "@/infra/git/git-client";
 import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
 import { isAmbiguousCommitMessage } from "@/core/analyzer/task-extractor";
 import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/gemini/gemini-client";
@@ -29,8 +30,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Repository not yet cloned" }, { status: 400 });
     }
 
-    // Git PAT 복호화
-    const gitCred = getCredentialByUserAndProvider(db, session.user.id, "git");
+    // Git PAT 복호화 — repo에 연결된 credential 우선 사용
+    const gitCred = repo.credential_id
+      ? getCredentialById(db, repo.credential_id)
+      : getCredentialByUserAndProvider(db, session.user.id, "git");
     if (!gitCred) {
       return NextResponse.json({ error: "Git PAT not configured" }, { status: 400 });
     }
@@ -48,7 +51,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    // 2. 새 커밋 수집
+    // 2. 언어 정보 갱신
+    try {
+      const token = decrypt(gitCred.credential);
+      const language = await fetchRepoLanguage(repo.owner, repo.repo, token);
+      updatePrimaryLanguage(db, repo.id, language);
+    } catch { /* non-critical */ }
+
+    // 3. 캐시 빌드 (증분) — 히트맵 데이터 소스
+    try {
+      const branches = await getBranches(repo.clone_path);
+      const latestDate = getLatestCacheDate(db, repo.id);
+      const cacheCommits = await getCommitsForCache(repo.clone_path, branches, latestDate ?? undefined);
+      if (cacheCommits.length > 0) {
+        const rows: CacheCommit[] = cacheCommits.map(c => ({
+          sha: c.sha,
+          repositoryId: repo.id,
+          branch: c.branch,
+          author: c.author,
+          message: c.message,
+          committedDate: c.committedDate,
+          committedAt: c.committedAt,
+        }));
+        insertCommitCache(db, rows);
+      }
+    } catch { /* non-critical */ }
+
+    // 4. 새 커밋 수집
     const commits = await getCommitsSince(repo.clone_path, repo.branch, repo.clone_url, repo.last_synced_sha);
     if (commits.length === 0) {
       insertSyncLogForUser(db, {
@@ -62,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ message: "No new commits", commitsProcessed: 0, tasksCreated: 0 });
     }
 
-    // 3. 모호한 커밋 보강
+    // 5. 모호한 커밋 보강
     const enrichedCommits: CommitRecord[] = [];
     for (const commit of commits) {
       if (isAmbiguousCommitMessage(commit.message)) {
@@ -74,7 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    // 4. 그룹핑 + Gemini 분석
+    // 6. 그룹핑 + Gemini 분석
     const groups = groupCommitsByDateAndProject(enrichedCommits);
     let tasksCreated = 0;
     for (const group of groups) {
@@ -82,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       tasksCreated += tasks.length;
     }
 
-    // 5. SHA 업데이트 + 로그
+    // 7. SHA 업데이트 + 로그
     updateLastSyncedSha(db, repo.id, commits[0].sha);
     insertSyncLogForUser(db, {
       repositoryId: repo.id,
