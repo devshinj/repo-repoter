@@ -32,7 +32,24 @@ export async function cloneRepository(cloneUrl: string, destPath: string, token:
   } catch { /* 디렉토리 없으면 무시 */ }
 
   const env = { ...process.env, ...buildAuthEnv(token) };
-  await execFileAsync("git", ["clone", "--bare", cloneUrl, destPath], { timeout: 120_000, env });
+  let effectiveUrl = cloneUrl;
+
+  try {
+    await execFileAsync("git", ["clone", "--bare", effectiveUrl, destPath], { timeout: 120_000, env });
+  } catch (err) {
+    const stderr = (err as any)?.stderr ?? "";
+    // HTTP→HTTPS 포트로 요청한 경우 자동 재시도
+    if (effectiveUrl.startsWith("http://") && stderr.includes("The requested URL returned error: 400")) {
+      effectiveUrl = effectiveUrl.replace(/^http:\/\//, "https://");
+      console.log(`[Git] http→https 전환 후 재시도: ${effectiveUrl}`);
+      // 실패로 남은 디렉토리 제거
+      try { await rm(destPath, { recursive: true, force: true }); } catch { /* ignore */ }
+      await execFileAsync("git", ["clone", "--bare", effectiveUrl, destPath], { timeout: 120_000, env });
+    } else {
+      throw err;
+    }
+  }
+
   // bare clone은 fetch refspec이 없으므로 수동 추가
   await execFileAsync(
     "git",
@@ -42,7 +59,7 @@ export async function cloneRepository(cloneUrl: string, destPath: string, token:
   // remote URL을 원본으로 설정 (credential 미포함)
   await execFileAsync(
     "git",
-    ["--git-dir", destPath, "config", "remote.origin.url", cloneUrl],
+    ["--git-dir", destPath, "config", "remote.origin.url", effectiveUrl],
     { timeout: 5_000 }
   );
   // 첫 fetch로 remote tracking refs 생성
