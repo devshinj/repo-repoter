@@ -32,13 +32,23 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { provider, token, label } = body;
+  const { provider, token, label, metadata } = body;
 
   if (!provider || !token || !label) {
     return NextResponse.json({ error: "provider, token, label are required" }, { status: 400 });
   }
   if (!validProviders.includes(provider)) {
     return NextResponse.json({ error: `provider must be one of: ${validProviders.join(", ")}` }, { status: 400 });
+  }
+
+  // metadata 검증: git provider는 type, host, apiBase 필수
+  if (provider === "git") {
+    if (!metadata?.type || !metadata?.host || !metadata?.apiBase) {
+      return NextResponse.json({ error: "metadata.type, metadata.host, metadata.apiBase are required for git provider" }, { status: 400 });
+    }
+    if (!["github", "gitea"].includes(metadata.type)) {
+      return NextResponse.json({ error: "metadata.type must be 'github' or 'gitea'" }, { status: 400 });
+    }
   }
 
   const db = getDb();
@@ -48,7 +58,7 @@ export async function POST(request: NextRequest) {
     provider,
     credential: encrypted,
     label,
-    metadata: null,
+    metadata: metadata ? JSON.stringify(metadata) : null,
   });
 
   return NextResponse.json({ message: "Credential saved" }, { status: 201 });
