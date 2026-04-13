@@ -20,6 +20,83 @@ import { cloneRepository, getBranches, getCommitsForCache } from "@/infra/git/gi
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
 
+async function registerSingleRepo(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  token: string,
+  cloneUrl: string,
+  branch: string
+): Promise<{ success: boolean; error?: string; cloneUrl: string }> {
+  let parsed;
+  try {
+    parsed = parseGitUrl(cloneUrl);
+  } catch {
+    return { success: false, error: "Invalid Git URL", cloneUrl };
+  }
+
+  try {
+    const { join } = await import("path");
+    const clonePath = join(process.cwd(), "data", "repos", userId, parsed.owner, `${parsed.repo}.git`);
+
+    insertRepositoryForUser(db, {
+      userId,
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch,
+      cloneUrl,
+    });
+
+    const repoRow = db.prepare(
+      "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
+    ).get(userId, cloneUrl) as any;
+
+    db.prepare("UPDATE repositories SET clone_path = ? WHERE id = ?").run(clonePath, repoRow.id);
+
+    // clone은 백그라운드로 실행
+    (async () => {
+      try {
+        await mkdir(join(process.cwd(), "data", "repos", userId, parsed!.owner), { recursive: true });
+        await cloneRepository(cloneUrl, clonePath, token);
+        console.log(`[Repos] Cloned ${cloneUrl} to ${clonePath}`);
+
+        try {
+          const language = await fetchRepoLanguage(parsed!.owner, parsed!.repo);
+          updatePrimaryLanguage(db, repoRow.id, language);
+        } catch (langErr) {
+          console.error(`[Repos] Language fetch failed for ${cloneUrl}:`, langErr);
+        }
+
+        try {
+          const branches = await getBranches(clonePath);
+          const cacheCommits = await getCommitsForCache(clonePath, branches);
+          if (cacheCommits.length > 0) {
+            const rows: CacheCommit[] = cacheCommits.map(c => ({
+              sha: c.sha,
+              repositoryId: repoRow.id,
+              branch: c.branch,
+              author: c.author,
+              message: c.message,
+              committedDate: c.committedDate,
+              committedAt: c.committedAt,
+            }));
+            const inserted = insertCommitCache(db, rows);
+            console.log(`[Repos] Cached ${inserted} commits for ${parsed!.owner}/${parsed!.repo}`);
+          }
+        } catch (cacheErr) {
+          console.error(`[Repos] Cache build failed for ${cloneUrl}:`, cacheErr);
+        }
+      } catch (err) {
+        console.error(`[Repos] Failed to clone ${cloneUrl}:`, err);
+      }
+    })();
+
+    return { success: true, cloneUrl };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg, cloneUrl };
+  }
+}
+
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,19 +112,6 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { cloneUrl, branch = "main" } = body;
-
-  if (!cloneUrl) {
-    return NextResponse.json({ error: "cloneUrl is required" }, { status: 400 });
-  }
-
-  let parsed;
-  try {
-    parsed = parseGitUrl(cloneUrl);
-  } catch {
-    return NextResponse.json({ error: "Invalid Git URL. Only HTTPS URLs are supported." }, { status: 400 });
-  }
-
   const userId = session.user.id;
   const db = getDb();
 
@@ -56,66 +120,33 @@ export async function POST(request: NextRequest) {
   if (!gitCred) {
     return NextResponse.json({ error: "Git PAT이 등록되지 않았습니다. 설정에서 먼저 등록하세요." }, { status: 400 });
   }
-
   const token = decrypt(gitCred.credential);
-  const { join } = await import("path");
-  const clonePath = join(process.cwd(), "data", "repos", userId, parsed.owner, `${parsed.repo}.git`);
 
-  insertRepositoryForUser(db, {
-    userId,
-    owner: parsed.owner,
-    repo: parsed.repo,
-    branch,
-    cloneUrl,
-  });
-
-  // 비동기로 bare clone 시작 (응답은 즉시 반환)
-  const repoRow = db.prepare(
-    "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
-  ).get(userId, cloneUrl) as any;
-
-  db.prepare("UPDATE repositories SET clone_path = ? WHERE id = ?").run(clonePath, repoRow.id);
-
-  // clone은 백그라운드로 실행
-  (async () => {
-    try {
-      await mkdir(join(process.cwd(), "data", "repos", userId, parsed!.owner), { recursive: true });
-      await cloneRepository(cloneUrl, clonePath, token);
-      console.log(`[Repos] Cloned ${cloneUrl} to ${clonePath}`);
-
-      // language 저장
-      try {
-        const language = await fetchRepoLanguage(parsed!.owner, parsed!.repo);
-        updatePrimaryLanguage(db, repoRow.id, language);
-      } catch (langErr) {
-        console.error(`[Repos] Language fetch failed for ${cloneUrl}:`, langErr);
-      }
-
-      // 초기 캐시 빌드
-      try {
-        const branches = await getBranches(clonePath);
-        const cacheCommits = await getCommitsForCache(clonePath, branches);
-        if (cacheCommits.length > 0) {
-          const rows: CacheCommit[] = cacheCommits.map(c => ({
-            sha: c.sha,
-            repositoryId: repoRow.id,
-            branch: c.branch,
-            author: c.author,
-            message: c.message,
-            committedDate: c.committedDate,
-            committedAt: c.committedAt,
-          }));
-          const inserted = insertCommitCache(db, rows);
-          console.log(`[Repos] Cached ${inserted} commits for ${parsed!.owner}/${parsed!.repo}`);
-        }
-      } catch (cacheErr) {
-        console.error(`[Repos] Cache build failed for ${cloneUrl}:`, cacheErr);
-      }
-    } catch (err) {
-      console.error(`[Repos] Failed to clone ${cloneUrl}:`, err);
+  // 일괄 등록
+  if (Array.isArray(body.repositories)) {
+    const results = [];
+    for (const item of body.repositories) {
+      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main");
+      results.push(result);
     }
-  })();
+    const succeeded = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success);
+    return NextResponse.json({
+      message: `${succeeded}개 저장소 등록됨${failed.length > 0 ? `, ${failed.length}개 실패` : ""}`,
+      results,
+    }, { status: 201 });
+  }
 
+  // 단건 등록 (기존 호환)
+  const { cloneUrl, branch = "main" } = body;
+  if (!cloneUrl) {
+    return NextResponse.json({ error: "cloneUrl is required" }, { status: 400 });
+  }
+
+  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch);
+  if (!result.success) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
   return NextResponse.json({ message: "Repository registered. Cloning in progress." }, { status: 201 });
 }
 
