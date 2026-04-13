@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseGitUrl, buildAuthenticatedUrl } from "@/infra/git/parse-git-url";
+import { parseGitUrl, buildAuthArgs } from "@/infra/git/parse-git-url";
 
 describe("parseGitUrl", () => {
   it("should parse GitHub HTTPS URL", () => {
@@ -41,24 +41,12 @@ describe("parseGitUrl", () => {
   });
 });
 
-describe("buildAuthenticatedUrl", () => {
-  it("should insert token as username for GitHub URL", () => {
-    const result = buildAuthenticatedUrl("https://github.com/octocat/hello-world.git", "ghp_token123");
-    expect(result).toBe("https://ghp_token123@github.com/octocat/hello-world.git");
-  });
-
-  it("should use Basic Auth for self-hosted GitLab URL", () => {
-    const result = buildAuthenticatedUrl("https://gitlab.com/group/project.git", "glpat-abc");
-    expect(result).toBe("https://oauth2:glpat-abc@gitlab.com/group/project.git");
-  });
-
-  it("should use Basic Auth for self-hosted Gitea HTTP URL", () => {
-    const result = buildAuthenticatedUrl("http://gitea.cudodev.synology.me:5001/infra_dev/cuvia_tta_web.git", "mytoken");
-    expect(result).toBe("http://oauth2:mytoken@gitea.cudodev.synology.me:5001/infra_dev/cuvia_tta_web.git");
-  });
-
-  it("should handle GitHub URL without .git suffix", () => {
-    const result = buildAuthenticatedUrl("https://github.com/owner/repo", "token");
-    expect(result).toBe("https://token@github.com/owner/repo");
+describe("buildAuthArgs", () => {
+  it("should return -c http.extraHeader with Basic auth", () => {
+    const args = buildAuthArgs("mytoken");
+    expect(args).toHaveLength(2);
+    expect(args[0]).toBe("-c");
+    const encoded = Buffer.from("oauth2:mytoken").toString("base64");
+    expect(args[1]).toBe(`http.extraHeader=Authorization: Basic ${encoded}`);
   });
 });

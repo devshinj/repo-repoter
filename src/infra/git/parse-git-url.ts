@@ -29,18 +29,12 @@ export function parseGitUrl(url: string): ParsedGitUrl {
   return { host: parsed.host, owner, repo };
 }
 
-export function buildAuthenticatedUrl(cloneUrl: string, token: string): string {
-  const url = new URL(cloneUrl);
-
-  if (url.host === "github.com") {
-    // GitHub: 토큰을 username에 넣는 방식
-    url.username = token;
-    url.password = "";
-    return url.toString().replace(/:@/, "@");
-  }
-
-  // Gitea/GitLab 등 self-hosted: Basic Auth (username:password) 형식
-  url.username = "oauth2";
-  url.password = token;
-  return url.toString();
+/**
+ * git 명령에 전달할 인증 옵션을 반환한다.
+ * URL에 credential을 넣지 않고 -c http.extraHeader로 Authorization 헤더를 전달하여
+ * self-hosted 서버(Gitea 등)의 URL userinfo 거부 문제를 회피한다.
+ */
+export function buildAuthArgs(token: string): string[] {
+  const encoded = Buffer.from(`oauth2:${token}`).toString("base64");
+  return ["-c", `http.extraHeader=Authorization: Basic ${encoded}`];
 }

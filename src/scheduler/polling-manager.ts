@@ -79,8 +79,14 @@ async function recloneRepo(database: ReturnType<typeof getDb>, userId: string, r
 }
 
 async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, repo: any): Promise<void> {
+  const gitCred = repo.credential_id
+    ? getCredentialById(database, repo.credential_id)
+    : getCredentialByUserAndProvider(database, userId, "git");
+  if (!gitCred) throw new Error("Git credential not found for sync");
+  const token = decrypt(gitCred.credential);
+
   try {
-    await pullRepository(repo.clone_path);
+    await pullRepository(repo.clone_path, token);
   } catch (err) {
     if (err instanceof RepoNotFoundError) {
       console.warn(`[Scheduler] ${repo.owner}/${repo.repo}: bare repo missing, re-cloning...`);
@@ -92,11 +98,7 @@ async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, r
 
   // language 갱신
   try {
-    const gitCred = repo.credential_id
-      ? getCredentialById(database, repo.credential_id)
-      : getCredentialByUserAndProvider(database, userId, "git");
-    const langToken = gitCred ? decrypt(gitCred.credential) : undefined;
-    const language = await fetchRepoLanguage(repo.owner, repo.repo, langToken);
+    const language = await fetchRepoLanguage(repo.owner, repo.repo, token);
     updatePrimaryLanguage(database, repo.id, language);
   } catch (langErr) {
     console.error(`[Scheduler] ${repo.owner}/${repo.repo}: language fetch failed -`, langErr);

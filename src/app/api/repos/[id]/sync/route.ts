@@ -38,12 +38,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Git PAT not configured" }, { status: 400 });
     }
 
+    const token = decrypt(gitCred.credential);
+
     // 1. git fetch (bare repo 없으면 re-clone)
     try {
-      await pullRepository(repo.clone_path);
+      await pullRepository(repo.clone_path, token);
     } catch (err) {
       if (err instanceof RepoNotFoundError) {
-        const token = decrypt(gitCred.credential);
         await mkdir(dirname(repo.clone_path), { recursive: true });
         await cloneRepository(repo.clone_url, repo.clone_path, token);
       } else {
@@ -53,7 +54,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // 2. 언어 정보 갱신
     try {
-      const token = decrypt(gitCred.credential);
       const language = await fetchRepoLanguage(repo.owner, repo.repo, token);
       updatePrimaryLanguage(db, repo.id, language);
     } catch { /* non-critical */ }
