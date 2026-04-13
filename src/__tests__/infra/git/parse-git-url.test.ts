@@ -27,11 +27,16 @@ describe("parseGitUrl", () => {
     expect(result).toEqual({ host: "gitlab.com", owner: "group/subgroup", repo: "project" });
   });
 
+  it("should parse HTTP URL with custom port (self-hosted Gitea)", () => {
+    const result = parseGitUrl("http://gitea.cudodev.synology.me:5001/infra_dev/cuvia_tta_web.git");
+    expect(result).toEqual({ host: "gitea.cudodev.synology.me:5001", owner: "infra_dev", repo: "cuvia_tta_web" });
+  });
+
   it("should throw on invalid URL", () => {
     expect(() => parseGitUrl("not-a-url")).toThrow();
   });
 
-  it("should throw on non-HTTPS URL", () => {
+  it("should throw on SSH URL", () => {
     expect(() => parseGitUrl("git@github.com:owner/repo.git")).toThrow();
   });
 });

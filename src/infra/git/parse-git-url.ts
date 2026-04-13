@@ -7,8 +7,8 @@ interface ParsedGitUrl {
 }
 
 export function parseGitUrl(url: string): ParsedGitUrl {
-  if (!url.startsWith("https://")) {
-    throw new Error("Only HTTPS Git URLs are supported");
+  if (!url.startsWith("https://") && !url.startsWith("http://")) {
+    throw new Error("Only HTTP(S) Git URLs are supported");
   }
 
   let parsed: URL;
