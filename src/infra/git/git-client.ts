@@ -328,7 +328,13 @@ export async function getCommitsForCache(
     }
 
     const args = ["--git-dir", repoPath, "log", ref, "--format=%H%n%an%n%aI%n%s%n---END---"];
-    if (since) args.push(`--since=${since}`);
+    if (since) {
+      // --since=YYYY-MM-DD는 같은 날짜 커밋을 누락할 수 있으므로 하루 전으로 보정
+      // INSERT OR IGNORE로 중복은 자동 스킵됨
+      const prev = new Date(since);
+      prev.setDate(prev.getDate() - 1);
+      args.push(`--since=${prev.toISOString().slice(0, 10)}`);
+    }
 
     try {
       const { stdout } = await execFileAsync("git", args, { timeout: 60_000, maxBuffer: 20 * 1024 * 1024 });
