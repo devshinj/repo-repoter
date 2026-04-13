@@ -30,11 +30,15 @@ export function parseGitUrl(url: string): ParsedGitUrl {
 }
 
 /**
- * git 명령에 전달할 인증 옵션을 반환한다.
- * URL에 credential을 넣지 않고 -c http.extraHeader로 Authorization 헤더를 전달하여
+ * git 명령에 전달할 인증용 환경변수를 반환한다.
+ * URL에 credential을 넣지 않고 GIT_CONFIG_* 환경변수로 Authorization 헤더를 전달하여
  * self-hosted 서버(Gitea 등)의 URL userinfo 거부 문제를 회피한다.
  */
-export function buildAuthArgs(token: string): string[] {
+export function buildAuthEnv(token: string): Record<string, string> {
   const encoded = Buffer.from(`oauth2:${token}`).toString("base64");
-  return ["-c", `http.extraHeader=Authorization: Basic ${encoded}`];
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.extraHeader",
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+  };
 }

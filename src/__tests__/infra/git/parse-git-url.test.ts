@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseGitUrl, buildAuthArgs } from "@/infra/git/parse-git-url";
+import { parseGitUrl, buildAuthEnv } from "@/infra/git/parse-git-url";
 
 describe("parseGitUrl", () => {
   it("should parse GitHub HTTPS URL", () => {
@@ -41,12 +41,14 @@ describe("parseGitUrl", () => {
   });
 });
 
-describe("buildAuthArgs", () => {
-  it("should return -c http.extraHeader with Basic auth", () => {
-    const args = buildAuthArgs("mytoken");
-    expect(args).toHaveLength(2);
-    expect(args[0]).toBe("-c");
+describe("buildAuthEnv", () => {
+  it("should return GIT_CONFIG env vars with Basic auth header", () => {
+    const env = buildAuthEnv("mytoken");
     const encoded = Buffer.from("oauth2:mytoken").toString("base64");
-    expect(args[1]).toBe(`http.extraHeader=Authorization: Basic ${encoded}`);
+    expect(env).toEqual({
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.extraHeader",
+      GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+    });
   });
 });

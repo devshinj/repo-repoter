@@ -3,7 +3,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { access, rm } from "fs/promises";
 import type { CommitRecord } from "@/core/types";
-import { buildAuthArgs, parseGitUrl } from "@/infra/git/parse-git-url";
+import { buildAuthEnv, parseGitUrl } from "@/infra/git/parse-git-url";
 
 const execFileAsync = promisify(execFile);
 
@@ -31,8 +31,8 @@ export async function cloneRepository(cloneUrl: string, destPath: string, token:
     await rm(destPath, { recursive: true, force: true });
   } catch { /* 디렉토리 없으면 무시 */ }
 
-  const authArgs = buildAuthArgs(token);
-  await execFileAsync("git", [...authArgs, "clone", "--bare", cloneUrl, destPath], { timeout: 120_000 });
+  const env = { ...process.env, ...buildAuthEnv(token) };
+  await execFileAsync("git", ["clone", "--bare", cloneUrl, destPath], { timeout: 120_000, env });
   // bare clone은 fetch refspec이 없으므로 수동 추가
   await execFileAsync(
     "git",
@@ -48,18 +48,18 @@ export async function cloneRepository(cloneUrl: string, destPath: string, token:
   // 첫 fetch로 remote tracking refs 생성
   await execFileAsync(
     "git",
-    [...authArgs, "--git-dir", destPath, "fetch", "origin"],
-    { timeout: 60_000 }
+    ["--git-dir", destPath, "fetch", "origin"],
+    { timeout: 60_000, env }
   );
 }
 
 export async function pullRepository(repoPath: string, token: string): Promise<void> {
   await assertRepoExists(repoPath);
-  const authArgs = buildAuthArgs(token);
+  const env = { ...process.env, ...buildAuthEnv(token) };
   await execFileAsync(
     "git",
-    [...authArgs, "--git-dir", repoPath, "fetch", "origin"],
-    { timeout: 60_000 }
+    ["--git-dir", repoPath, "fetch", "origin"],
+    { timeout: 60_000, env }
   );
 }
 
