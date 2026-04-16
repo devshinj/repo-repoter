@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { GitCommit, TrendingUp, Flame } from "lucide-react";
+import { calcStreak, formatDate } from "@/components/growth-tree/hooks/use-tree-metrics";
 
 interface ContributionHeatmapProps {
   data: Record<string, number>;
@@ -27,13 +28,6 @@ function getLevel(count: number): number {
   return 4;
 }
 
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function useIsDark() {
   const [dark, setDark] = useState(false);
   useEffect(() => {
@@ -45,22 +39,6 @@ function useIsDark() {
     return () => obs.disconnect();
   }, []);
   return dark;
-}
-
-function calcStreak(data: Record<string, number>): number {
-  let streak = 0;
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  while (true) {
-    const key = formatDate(d);
-    if ((data[key] ?? 0) > 0) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-  return streak;
 }
 
 function calcBusiestDay(data: Record<string, number>): { date: string; count: number } | null {
