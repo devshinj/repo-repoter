@@ -49,6 +49,13 @@ function collectCoords(sprite: Sprite, keys: PaletteKey[]): Array<[number, numbe
 
 function makeStage(name: string, rows: string[], fruitSlots: Array<[number, number]>): TreeStage {
   const sprite = parsePixels(rows);
+  // 검증: 모든 fruitSlot이 잎 셀 위에 있어야 함
+  for (const [y, x] of fruitSlots) {
+    const cell = sprite[y]?.[x];
+    if (cell !== "leafDark" && cell !== "leafMid" && cell !== "leafLight") {
+      console.warn(`[growth-tree] ${name} fruitSlot [${y},${x}] lands on '${cell}', not a leaf`);
+    }
+  }
   return {
     name,
     sprite,
@@ -215,7 +222,7 @@ export const stage4_medium = makeStage(
     "__________tDtDtDtD______________",
     "________sosososososo____________",
   ],
-  [[2, 3], [3, 6], [4, 12], [7, 3], [9, 2], [9, 12], [11, 2], [11, 10]]
+  [[2, 3], [3, 6], [4, 12], [7, 3], [9, 2], [9, 12], [11, 3], [11, 9]]
 );
 
 // Stage 5: 큰나무
@@ -247,7 +254,7 @@ export const stage5_large = makeStage(
     "__________tDtDtDtD______________",
     "______sosososososososo__________",
   ],
-  [[2, 2], [3, 6], [4, 11], [5, 1], [6, 12], [9, 1], [9, 12], [11, 2], [12, 10], [14, 4]]
+  [[2, 2], [3, 6], [4, 11], [5, 1], [6, 12], [9, 1], [9, 12], [11, 2], [12, 10], [14, 2]]
 );
 
 // Stage 6: 거목
@@ -279,7 +286,7 @@ export const stage6_giant = makeStage(
     "__________tDtDtDtD______________",
     "____sosososososososososo________",
   ],
-  [[2, 1], [3, 5], [3, 11], [5, 2], [6, 12], [7, 1], [9, 2], [9, 12], [11, 3], [13, 11]]
+  [[2, 1], [3, 5], [3, 11], [5, 2], [6, 12], [7, 1], [9, 2], [9, 12], [11, 2], [13, 11]]
 );
 
 export const treeStages: TreeStage[] = [
