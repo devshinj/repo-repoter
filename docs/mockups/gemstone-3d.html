@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gemstone 3D — R3F 목업</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg-0: #0c0d12;
+    --bg-1: #16171e;
+    --ink: #ece9e4;
+    --ink-muted: #8a8a96;
+    --border: rgba(255, 255, 255, .08);
+    --panel: rgba(22, 22, 28, .75);
+    --user-hue: 262;
+  }
+  :root[data-theme="light"] {
+    --bg-0: #f7f5f0;
+    --bg-1: #eae6de;
+    --ink: #1a1a20;
+    --ink-muted: #6a6a75;
+    --border: rgba(0, 0, 0, .1);
+    --panel: rgba(255, 255, 255, .75);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Fraunces", serif;
+    background:
+      radial-gradient(ellipse at 30% 0%, hsl(var(--user-hue) 60% 50% / .08), transparent 55%),
+      radial-gradient(ellipse at 75% 85%, hsl(calc(var(--user-hue) + 60) 60% 50% / .06), transparent 50%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    padding: 72px 64px 64px;
+    transition: background-color 0.5s;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.45'/></svg>");
+    opacity: .03;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  .hero {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 40px; padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; letter-spacing: .35em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 44px; font-weight: 300; letter-spacing: -.015em; line-height: 1;
+    font-style: italic;
+  }
+  h1 em { font-style: normal; font-weight: 500;
+    background: linear-gradient(135deg, #c4b5fd, #86efac 60%, #7dd3fc);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .meta {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; color: var(--ink-muted); letter-spacing: .1em;
+    text-align: right; line-height: 1.7;
+  }
+
+  .user-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-top: 12px; padding: 6px 12px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; color: var(--ink-muted); letter-spacing: .15em;
+  }
+  .user-chip .hash-sw {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 440px;
+    gap: 28px;
+    margin-bottom: 28px;
+    align-items: stretch;
+  }
+
+  .heat-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+    backdrop-filter: blur(14px);
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .heat-panel::after {
+    content: "CADENCE · 26w"; position: absolute; top: -9px; left: 24px;
+    background: var(--bg-0); padding: 0 10px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--ink-muted); letter-spacing: .3em;
+  }
+  .heat-label {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 15px; color: var(--ink-muted); margin-bottom: 24px;
+  }
+  .heat-grid {
+    display: grid; grid-template-columns: repeat(26, 1fr); gap: 3px;
+    flex: 1;
+  }
+  .heat-cell {
+    aspect-ratio: 1; border-radius: 1px;
+    background: rgba(255,255,255,.035);
+  }
+  .heat-cell[data-lvl="1"] { background: hsl(var(--user-hue) 40% 40% / .5); }
+  .heat-cell[data-lvl="2"] { background: hsl(var(--user-hue) 45% 52% / .75); }
+  .heat-cell[data-lvl="3"] { background: hsl(var(--user-hue) 50% 65% / .9); }
+  .heat-cell[data-lvl="4"] {
+    background: linear-gradient(135deg,
+      hsl(var(--user-hue) 55% 70%),
+      hsl(calc(var(--user-hue) + 60) 50% 68%));
+    box-shadow: 0 0 8px hsl(var(--user-hue) 50% 60% / .45);
+  }
+  .heat-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 22px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--ink-muted); letter-spacing: .15em;
+  }
+
+  /* Floating bar container (preset + theme) */
+  .top-bar {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 100;
+  }
+  .preset-bar, .theme-bar {
+    display: flex; gap: 4px; padding: 4px;
+    background: color-mix(in oklch, var(--bg-0) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; letter-spacing: .15em; text-transform: uppercase;
+  }
+  .preset-bar button, .theme-bar button {
+    padding: 8px 14px; border: none; background: transparent;
+    color: color-mix(in oklch, var(--ink) 55%, transparent);
+    cursor: pointer; border-radius: 999px;
+    font: inherit; transition: all .3s;
+  }
+  .preset-bar button.active, .theme-bar button.active {
+    background: hsl(var(--user-hue) 60% 50% / .22);
+    color: var(--ink);
+  }
+
+  .gem-panel {
+    width: 440px; height: 440px;
+    position: relative;
+    transition: filter 0.6s ease;
+  }
+  .gem-panel:hover {
+    filter: drop-shadow(0 0 24px hsl(var(--user-hue) 60% 55% / .3));
+  }
+  .gem-panel canvas {
+    position: absolute; inset: 0;
+    display: block; width: 100%; height: 100%;
+    background: transparent;
+  }
+
+  .metrics {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .metric {
+    background: var(--bg-0);
+    padding: 22px 20px;
+  }
+  .m-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 8px;
+  }
+  .m-value {
+    font-family: "Fraunces", serif; font-weight: 500;
+    font-size: 30px; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .m-value em {
+    font-style: italic; font-weight: 400;
+    background: linear-gradient(135deg,
+      hsl(var(--user-hue) 55% 78%),
+      hsl(calc(var(--user-hue) + 50) 55% 72%));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .m-value .unit {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; color: var(--ink-muted);
+    margin-left: 4px;
+  }
+  .m-sub {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 12px; color: var(--ink-muted); margin-top: 6px;
+  }
+
+  .verse {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 16px; color: var(--ink-muted);
+    max-width: 720px; margin-top: 36px; line-height: 1.65;
+    padding-top: 22px; border-top: 1px solid var(--border);
+  }
+  .verse::before { content: "— "; color: hsl(var(--user-hue) 50% 70%); }
+  .verse b { color: var(--ink); font-weight: 400; font-style: normal; }
+</style>
+
+<!-- importmap: three + R3F ecosystem via ESM.sh CDN -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "three": "https://esm.sh/three@0.160.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.16?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.99.0?deps=react@18.3.1,react-dom@18.3.1,three@0.160.0,@react-three/fiber@8.15.16"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="preset-bar" id="presetBar">
+    <button data-preset="raw">Raw · 원석</button>
+    <button data-preset="sprout">Sprout · 새싹</button>
+    <button data-preset="forming">Forming · 형성</button>
+    <button data-preset="polished" class="active">Polished · 완성</button>
+  </div>
+  <div class="theme-bar" id="themeBar">
+    <button data-theme="dark" class="active">Dark</button>
+    <button data-theme="light">Light</button>
+  </div>
+</div>
+
+<div class="hero">
+  <div>
+    <div class="eyebrow">Refinery · MMXXVI</div>
+    <h1>당신의 보석은 <em>완전히 연마</em>되었습니다</h1>
+    <div class="user-chip">
+      <span class="hash-sw" id="hashSw"></span>
+      <span id="hashText">JAESEOK · #— · —°</span>
+    </div>
+  </div>
+  <div class="meta">
+    TUESDAY · 16 APR 2026<br/>
+    SEOUL · 14:22 KST<br/>
+    STAGE: FULLY POLISHED
+  </div>
+</div>
+
+<div class="layout">
+  <div class="heat-panel">
+    <div class="heat-label">지난 26주간 활동 — 누적 384커밋 · 활동일 127일</div>
+    <div class="heat-grid" id="heat"></div>
+    <div class="heat-foot">
+      <span>LESS</span>
+      <span>▪ ▪ ▪ ▪</span>
+      <span>MORE</span>
+    </div>
+  </div>
+
+  <div class="gem-panel" id="panel">
+    <div id="gemRoot" style="position: absolute; inset: 0;"></div>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="m-label">Gem Size</div>
+    <div class="m-value"><em>384</em></div>
+    <div class="m-sub">누적 커밋</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Streak</div>
+    <div class="m-value"><em>47</em><span class="unit">days</span></div>
+    <div class="m-sub">연속 활동</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Active Days</div>
+    <div class="m-value"><em>127</em><span class="unit">/ 182</span></div>
+    <div class="m-sub">활동일 · 6개월</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Repos</div>
+    <div class="m-value"><em>6</em><span class="unit">hues</span></div>
+    <div class="m-sub">색상 다양성</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Today</div>
+    <div class="m-value"><em>5</em><span class="unit">new</span></div>
+    <div class="m-sub">오늘의 커밋</div>
+  </div>
+</div>
+
+<p class="verse">
+  거친 원석을 47일 동안 깎아내어, 오늘 당신만의 보석이 완성되었습니다.
+  여섯 개의 저장소가 <b>각자의 빛깔</b>로 파세트에 스며들었고,
+  표면은 광원 아래에서 부드럽게 숨 쉬고 있습니다.
+</p>
+
+<!-- ─────────────────────────────────────────
+     Heatmap + chip setup (plain JS before R3F)
+────────────────────────────────────────── -->
+<script>
+function hashString(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
+  return Math.abs(h);
+}
+const USER_SEED = "jaeseok@mrshinj.gmail.com";
+const userHash = hashString(USER_SEED);
+// userHue will be set after palette is built (to match the user's signature gem)
+let userHue = 262;
+document.documentElement.style.setProperty("--user-hue", userHue);
+
+function refreshUserHueUI() {
+  document.documentElement.style.setProperty("--user-hue", userHue);
+  document.getElementById("hashSw").style.background =
+    `linear-gradient(135deg, hsl(${userHue} 72% 62%), hsl(${(userHue + 40) % 360} 68% 62%))`;
+  document.getElementById("hashText").textContent =
+    `JAESEOK · #${userHash.toString(16).slice(0, 4).toUpperCase()} · ${userHue}°`;
+  window.__USER_HUE = userHue;
+}
+refreshUserHueUI();
+
+function generateHeat() {
+  const WEEKS = 26, DAYS = 7;
+  const cells = [];
+  for (let w = 0; w < WEEKS; w++) {
+    for (let d = 0; d < DAYS; d++) {
+      const recency = w / WEEKS;
+      const r = Math.random();
+      let lvl = 0;
+      if (r < 0.5 + recency * 0.35) {
+        const t = Math.random() + recency * 0.3 + 0.2;
+        if (t > 1.2) lvl = 4;
+        else if (t > 0.9) lvl = 3;
+        else if (t > 0.55) lvl = 2;
+        else lvl = 1;
+      }
+      cells.push(lvl);
+    }
+  }
+  for (let i = cells.length - 47; i < cells.length; i++) {
+    if (cells[i] === 0) cells[i] = 2 + Math.floor(Math.random() * 3);
+  }
+  return cells;
+}
+document.getElementById("heat").innerHTML = generateHeat()
+  .map(lvl => `<div class="heat-cell" data-lvl="${lvl}"></div>`).join("");
+
+// Repo palette — share with R3F module via globals
+window.__USER_HASH = userHash;
+window.__USER_HUE = userHue;
+window.__syncUserHue = (h) => {
+  userHue = Math.round(h);
+  refreshUserHueUI();
+};
+
+function seededRandomFactory(seed) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+
+// Curated gemstone palette — 12 distinct, high-visibility jewel tones
+// Hues spaced across the wheel; each already tuned for saturation + lightness
+const GEM_PALETTE_POOL = [
+  { h: 348, s: 82, l: 62, name: "ruby"       },  // 루비
+  { h: 20,  s: 86, l: 64, name: "coral"      },  // 산호
+  { h: 38,  s: 88, l: 64, name: "topaz"      },  // 토파즈
+  { h: 52,  s: 82, l: 64, name: "citrine"    },  // 시트린
+  { h: 82,  s: 62, l: 58, name: "peridot"    },  // 페리도트
+  { h: 150, s: 58, l: 52, name: "emerald"    },  // 에메랄드
+  { h: 172, s: 70, l: 52, name: "turquoise"  },  // 터키석
+  { h: 190, s: 75, l: 58, name: "aqua"       },  // 아쿠아마린
+  { h: 214, s: 78, l: 60, name: "sapphire"   },  // 사파이어
+  { h: 250, s: 68, l: 66, name: "tanzanite"  },  // 탄자나이트
+  { h: 280, s: 62, l: 64, name: "amethyst"   },  // 아메시스트
+  { h: 322, s: 72, l: 66, name: "morganite"  },  // 모르가나이트
+];
+
+// Build palette: pick `count` colors from the pool, well-spaced across the hue wheel,
+// with a per-user starting offset so each user has a distinctive signature.
+function buildRepoPalette(count) {
+  const poolSize = GEM_PALETTE_POOL.length;
+  const n = Math.max(1, Math.min(count, poolSize));
+  const stride = Math.max(1, Math.floor(poolSize / n));
+  const startOffset = userHash % poolSize;
+  const palRand = seededRandomFactory(userHash + 7 + count);
+
+  const palette = [];
+  const usedIndices = new Set();
+  for (let i = 0; i < n; i++) {
+    // Even stride with a small per-color jitter so palettes aren't identical across users
+    const idx = (startOffset + i * stride + Math.floor(palRand() * 2)) % poolSize;
+    // If duplicate after jitter, fall back to deterministic slot
+    let finalIdx = idx;
+    while (usedIndices.has(finalIdx)) finalIdx = (finalIdx + 1) % poolSize;
+    usedIndices.add(finalIdx);
+    palette.push({ ...GEM_PALETTE_POOL[finalIdx] });
+  }
+  return palette;
+}
+
+function renderRepoSwatches(palette) {
+  const el = document.getElementById("repoSwatches");
+  if (!el) return;
+  el.innerHTML = palette.map(c =>
+    `<div class="sw" style="background: hsl(${c.h.toFixed(0)} ${c.s.toFixed(0)}% ${c.l.toFixed(0)}%);"></div>`
+  ).join("");
+}
+window.buildRepoPalette = buildRepoPalette;
+window.renderRepoSwatches = renderRepoSwatches;
+</script>
+
+<!-- ─────────────────────────────────────────
+     R3F Gemstone scene
+────────────────────────────────────────── -->
+<script type="module">
+import * as THREE from "three";
+import React, { useRef, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Environment, Float, ContactShadows } from "@react-three/drei";
+
+const h = React.createElement;
+const userHash = window.__USER_HASH;
+// Live reference — base script updates window.__USER_HUE once the palette is picked
+const getUserHue = () => window.__USER_HUE;
+
+// ─── Presets (5 metrics) ───
+// streak: 연속 커밋 일수 | totalCommits: 누적 커밋 | repos: 저장소 수
+// activeDays: 6개월 중 활동일 | maxDaily: 하루 최다 커밋
+const PRESETS = {
+  raw:      { streak: 0,  totalCommits: 3,   repos: 1, activeDays: 2,   maxDaily: 1  },
+  sprout:   { streak: 4,  totalCommits: 35,  repos: 2, activeDays: 18,  maxDaily: 4  },
+  forming:  { streak: 18, totalCommits: 180, repos: 4, activeDays: 72,  maxDaily: 9  },
+  polished: { streak: 47, totalCommits: 384, repos: 6, activeDays: 127, maxDaily: 18 },
+};
+
+// ─── Metric → geometry params ───
+// Each metric normalized [0..1] via soft ceiling, then mapped to a gem property
+function normalizeMetrics(m) {
+  const n = (v, ceiling) => Math.min(1, v / ceiling);
+  return {
+    size:      n(m.totalCommits, 500),   // accumulated commits → overall scale
+    facets:    n(m.repos,        8),     // repo count → ring vertex N
+    smooth:    n(m.streak,       60),    // streak → jitter reduction
+    polish:    n(m.activeDays,   160),   // active days → surface polish
+    radiance:  n(m.maxDaily,     25),    // max daily commits → inner glow
+  };
+}
+window.__PRESETS = PRESETS;
+window.__NORMALIZE = normalizeMetrics;
+
+// ─── Seeded RNG ───
+function seededRandom(seed) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+
+// ─── HSL → linear RGB (for THREE.Color) ───
+function hslToColor(H, S, L) {
+  const c = new THREE.Color();
+  c.setHSL((H % 360) / 360, S / 100, L / 100);
+  return c;
+}
+
+// ─── Build gemstone geometry (low-poly, irregular) ───
+// Metrics drive shape growth:
+//   size     [0..1] → overall scale + crown/pavilion height
+//   facets   [0..1] → ring vertex count N (4..10)
+//   smooth   [0..1] → vertex jitter reduction (rough → clean)
+function buildGemGeometry(hash, metrics, palette) {
+  const rand = seededRandom(hash);
+  const { size, facets, smooth } = metrics;
+
+  // Facet count: 4 (raw) → 10 (polished)
+  const N = Math.round(4 + facets * 6);
+  // Overall scale
+  const scale = 0.45 + size * 0.55;
+  // Jitter inverse of smoothness — high at streak=0 (rough rock), low at high streak
+  const jitter = 0.42 - smooth * 0.32;  // 0.42 → 0.10
+  // Crown/pavilion height grows with size — from blob to pointed gem
+  const topness = 0.3 + size * 0.7;  // 0 → chunk, 1 → pointed
+
+  // Heights along Y (all scaled)
+  const yTop   = (0.6 + topness * 0.95 + rand() * 0.1) * scale;
+  const yCrown = (0.4 + topness * 0.45 + rand() * 0.1) * scale;
+  const yBelt  = 0.0;
+  const yPavil = (-0.5 - topness * 0.5 - rand() * 0.1) * scale;
+  const yBot   = (-1.0 - topness * 0.9 - rand() * 0.1) * scale;
+
+  // Radii grow slightly with size, but less dramatic
+  const rCrown = (0.55 + size * 0.25 + rand() * 0.08) * scale;
+  const rBelt  = (0.85 + size * 0.4  + rand() * 0.1)  * scale;
+  const rPavil = (0.7  + size * 0.25 + rand() * 0.08) * scale;
+
+  // Shared angular positions per slot — same base angle across rings so they connect cleanly
+  const slotAngles = [];
+  for (let i = 0; i < N; i++) {
+    const baseA = (Math.PI * 2) * (i / N);
+    const aJit = (rand() - 0.5) * jitter;
+    slotAngles.push(baseA + aJit);
+  }
+
+  function makeRing(baseR, y) {
+    const ring = [];
+    for (let i = 0; i < N; i++) {
+      const a = slotAngles[i];
+      const rJit = 1 + (rand() - 0.5) * jitter;
+      const yJit = (rand() - 0.5) * jitter * 0.25;
+      ring.push(new THREE.Vector3(
+        Math.cos(a) * baseR * rJit,
+        y + yJit,
+        Math.sin(a) * baseR * rJit,
+      ));
+    }
+    return ring;
+  }
+
+  const crown = makeRing(rCrown, yCrown);
+  const belt  = makeRing(rBelt,  yBelt);
+  const pavil = makeRing(rPavil, yPavil);
+  const apexTop = new THREE.Vector3((rand() - 0.5) * 0.1 * scale, yTop, (rand() - 0.5) * 0.08 * scale);
+  const apexBot = new THREE.Vector3((rand() - 0.5) * 0.08 * scale, yBot, (rand() - 0.5) * 0.06 * scale);
+
+  const positions = [];
+  const colors = [];
+  const faceMeta = [];
+
+  function pushTri(a, b, c, zone, facetAngle) {
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    for (let k = 0; k < 3; k++) colors.push(1, 1, 1);
+    faceMeta.push({ zone, angle: facetAngle });
+  }
+
+  // ─── Watertight tri strip between two equal-length rings ───
+  function bridgeRings(ringA, ringB, zone) {
+    for (let i = 0; i < N; i++) {
+      const a0 = ringA[i];
+      const a1 = ringA[(i + 1) % N];
+      const b0 = ringB[i];
+      const b1 = ringB[(i + 1) % N];
+      const midAngle = (slotAngles[i] + slotAngles[(i + 1) % N]) / 2;
+      pushTri(a0, b0, a1, zone, midAngle);
+      pushTri(a1, b0, b1, zone, midAngle);
+    }
+  }
+
+  // Crown: apex → crown pair
+  for (let i = 0; i < N; i++) {
+    const a = crown[i];
+    const b = crown[(i + 1) % N];
+    const facetAngle = (slotAngles[i] + slotAngles[(i + 1) % N]) / 2;
+    pushTri(apexTop, a, b, "crown", facetAngle);
+  }
+
+  // Crown ring → belt ring (upper girdle, watertight)
+  bridgeRings(crown, belt, "uppergirdle");
+
+  // Belt → pavilion (watertight)
+  bridgeRings(belt, pavil, "belt");
+
+  // Pavilion → bottom apex
+  for (let i = 0; i < N; i++) {
+    const a = pavil[i];
+    const b = pavil[(i + 1) % N];
+    const facetAngle = (slotAngles[i] + slotAngles[(i + 1) % N]) / 2;
+    pushTri(a, apexBot, b, "pavilion", facetAngle);
+  }
+
+  // Assign face colors randomly per face — each face picks a repo independently.
+  // Zone shading still applies so crown/pavilion have tonal difference.
+  const zoneLightness = { crown: +8, uppergirdle: +2, belt: 0, pavilion: -12 };
+  const zoneSatBoost = { crown: -2, uppergirdle: +3, belt: +5, pavilion: +8 };
+
+  // Separate RNG for face→repo assignment so it's stable across re-renders of same metrics
+  const faceRand = seededRandom(hash + palette.length * 13 + Math.round(size * 1000));
+
+  for (let f = 0; f < faceMeta.length; f++) {
+    const { zone } = faceMeta[f];
+    const repo = palette[Math.floor(faceRand() * palette.length)];
+    const L = Math.min(92, Math.max(12, repo.l + zoneLightness[zone]));
+    const S = Math.min(95, Math.max(30, repo.s + zoneSatBoost[zone]));
+    const color = hslToColor(repo.h, S, L);
+    // Write color to all 3 vertices of this face
+    const idx = f * 9;
+    for (let v = 0; v < 3; v++) {
+      colors[idx + v * 3 + 0] = color.r;
+      colors[idx + v * 3 + 1] = color.g;
+      colors[idx + v * 3 + 2] = color.b;
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute("color",    new THREE.Float32BufferAttribute(colors, 3));
+  geom.computeVertexNormals();
+  // Sharpen normals via non-indexed geometry → already flat since each face is its own triangle
+  return geom;
+}
+
+// ─── Gem component ───
+function Gem({ hovered, metrics, palette, theme }) {
+  const groupRef = useRef();
+  // Rebuild geometry whenever metrics/palette change
+  const geometry = useMemo(
+    () => buildGemGeometry(userHash, metrics, palette),
+    [metrics, palette]
+  );
+  const edges = useMemo(() => new THREE.EdgesGeometry(geometry, 10), [geometry]);
+
+  const isLight = theme === "light";
+
+  // polish [0..1] → surface finish
+  // radiance [0..1] → inner glow intensity
+  const { polish, radiance, smooth } = metrics;
+  const matRoughness = (isLight ? 0.62 : 0.72) - polish * 0.4;   // 라이트는 살짝 더 매끈
+  const matClearcoat = 0.25 + polish * 0.5;
+  const matEnvIntensity = isLight ? 0.35 + polish * 0.4 : 0.18 + polish * 0.3;
+  const edgeOpacity = (isLight ? 0.22 : 0.28) - smooth * 0.18;
+
+  useFrame((_, dt) => {
+    if (!groupRef.current) return;
+    // Rotate Y — hover accelerates. Streak also slightly boosts base speed.
+    const baseSpeed = 0.18 + smooth * 0.22;  // 0.18 → 0.4
+    const speed = hovered ? baseSpeed * 4 : baseSpeed;
+    groupRef.current.rotation.y += dt * speed;
+    groupRef.current.rotation.x = Math.sin(performance.now() * 0.0004) * 0.08;
+  });
+
+  return h("group", { ref: groupRef },
+    h("mesh", { geometry, castShadow: true, receiveShadow: true },
+      h("meshPhysicalMaterial", {
+        vertexColors: true,
+        metalness: 0.05,
+        roughness: matRoughness,
+        clearcoat: matClearcoat,
+        clearcoatRoughness: 0.35,
+        reflectivity: 0.2,
+        envMapIntensity: matEnvIntensity,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      })
+    ),
+    h("lineSegments", { geometry: edges },
+      h("lineBasicMaterial", {
+        color: new THREE.Color(isLight ? 0x1a1a20 : 0xffffff),
+        transparent: true,
+        opacity: edgeOpacity,
+      })
+    ),
+    // Inner glow scales with maxDaily (radiance)
+    h("pointLight", {
+      color: hslToColor(getUserHue(), 80, 70),
+      intensity: 0.05 + radiance * 0.6,
+      distance: 3,
+      decay: 2,
+    })
+  );
+}
+
+// ─── Scene ───
+function Scene({ metrics, palette, theme }) {
+  const [hovered, setHovered] = useState(false);
+  const panel = document.getElementById("panel");
+  React.useEffect(() => {
+    const on  = () => setHovered(true);
+    const off = () => setHovered(false);
+    panel.addEventListener("mouseenter", on);
+    panel.addEventListener("mouseleave", off);
+    return () => {
+      panel.removeEventListener("mouseenter", on);
+      panel.removeEventListener("mouseleave", off);
+    };
+  }, []);
+
+  // Theme-specific lighting
+  const isLight = theme === "light";
+  const envPreset = isLight ? "apartment" : "city";
+  const ambientIntensity = isLight ? 0.55 : 0.22;
+  // Key light: warm daylight (light) vs. cooler interior (dark)
+  const keyColor = isLight ? "#fff4dc" : "#ffffff";
+  const keyIntensity = isLight ? 1.8 : 1.2;
+  // Fill uses user hue but less saturated in light theme
+  const fillIntensity = isLight ? 0.4 : 0.55;
+  // Shadow parameters
+  const shadowOpacity = isLight ? 0.38 : 0.55;
+  const shadowColor = isLight ? "#000000" : "#000000";
+  const shadowBlur = isLight ? 2.5 : 3.5;
+
+  return h(React.Fragment, null,
+    h(Environment, { preset: envPreset, background: false }),
+    h("ambientLight", { intensity: ambientIntensity }),
+
+    // Key light — top-front
+    h("directionalLight", {
+      position: [3, 5, 4],
+      intensity: keyIntensity,
+      color: keyColor,
+    }),
+    // Fill — side, in user's signature color
+    h("directionalLight", {
+      position: [-3, 2, -2],
+      intensity: fillIntensity,
+      color: hslToColor(getUserHue(), isLight ? 40 : 55, isLight ? 70 : 68),
+    }),
+    // Rim — subtle
+    h("pointLight", {
+      position: [0, -1, 3],
+      intensity: 0.25,
+      color: hslToColor((getUserHue() + 60) % 360, 50, 70),
+    }),
+
+    // Floor contact shadow — responds to actual gem geometry
+    h(ContactShadows, {
+      position: [0, -1.95, 0],
+      opacity: shadowOpacity,
+      scale: 6,
+      blur: shadowBlur,
+      far: 3,
+      resolution: 512,
+      color: shadowColor,
+    }),
+
+    h(Float, {
+      speed: 1.2, rotationIntensity: 0.15, floatIntensity: 0.35, floatingRange: [-0.06, 0.06],
+    },
+      h(Gem, { hovered, metrics, palette, theme })
+    )
+  );
+}
+
+function App() {
+  const [presetKey, setPresetKey] = useState("polished");
+  const [theme, setTheme] = useState("dark");
+  const metricsData = window.__PRESETS[presetKey];
+  const metrics = useMemo(() => window.__NORMALIZE(metricsData), [presetKey]);
+  const palette = useMemo(() => window.buildRepoPalette(metricsData.repos), [presetKey]);
+
+  // Apply theme attribute to document root
+  React.useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  // Expose swatch render + metric strip update, and wire up preset bar
+  React.useEffect(() => {
+    // Sync user hue to the first palette color so surrounding UI matches the gem's signature
+    if (palette.length && window.__syncUserHue) {
+      window.__syncUserHue(palette[0].h);
+    }
+    window.renderRepoSwatches(palette);
+    // Update metric strip values
+    const $ = (id) => document.getElementById(id);
+    const m = metricsData;
+    // Use selectors by position
+    const metricEls = document.querySelectorAll(".metric .m-value em");
+    if (metricEls.length >= 5) {
+      metricEls[0].textContent = m.totalCommits;
+      metricEls[1].textContent = m.streak;
+      metricEls[2].textContent = m.activeDays;
+      metricEls[3].textContent = m.repos;
+      metricEls[4].textContent = m.maxDaily;
+    }
+  }, [palette, metricsData]);
+
+  React.useEffect(() => {
+    const bar = document.getElementById("presetBar");
+    const handler = (e) => {
+      const key = e.target?.dataset?.preset;
+      if (!key) return;
+      setPresetKey(key);
+      bar.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.preset === key));
+    };
+    bar.addEventListener("click", handler);
+    return () => bar.removeEventListener("click", handler);
+  }, []);
+
+  React.useEffect(() => {
+    const bar = document.getElementById("themeBar");
+    const handler = (e) => {
+      const t = e.target?.dataset?.theme;
+      if (!t) return;
+      setTheme(t);
+      bar.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.theme === t));
+    };
+    bar.addEventListener("click", handler);
+    return () => bar.removeEventListener("click", handler);
+  }, []);
+
+  return h(Canvas, {
+    camera: { position: [0, 0.4, 5.2], fov: 38 },
+    dpr: [1, 2],
+    gl: { antialias: true, alpha: true },
+    style: { background: "transparent" },
+  },
+    h(Scene, { metrics, palette, theme })
+  );
+}
+
+createRoot(document.getElementById("gemRoot")).render(h(App));
+</script>
+
+</body>
+</html>

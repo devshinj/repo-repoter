@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crystal Sketch — SVG 목업</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,400&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg-0: #0a0d1f;
+    --bg-1: #141833;
+    --ink: #e8e4f0;
+    --ink-muted: #8b88a8;
+    --violet: #9f7aea;
+    --violet-2: #7c3aed;
+    --cyan: #5eead4;
+    --gold: #f0c987;
+    --rose: #f472b6;
+    --panel: rgba(22, 18, 38, .7);
+    --border: rgba(159, 122, 234, .18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Fraunces", serif;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(159, 122, 234, .18), transparent 55%),
+      radial-gradient(ellipse at 80% 100%, rgba(94, 234, 212, .12), transparent 50%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    padding: 64px 64px 64px;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.4'/></svg>");
+    opacity: .035; pointer-events: none; z-index: 0;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* ── Hero ── */
+  .hero {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 48px; padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--violet); margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 48px; font-weight: 300; letter-spacing: -.02em; line-height: 1;
+    font-style: italic;
+  }
+  h1 em { color: var(--cyan); font-style: normal; font-weight: 600; }
+  .meta {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; color: var(--ink-muted); letter-spacing: .1em;
+    text-align: right;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 24px;
+    margin-bottom: 32px;
+    align-items: stretch;
+  }
+
+  /* ── Heatmap ── */
+  .heat-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 32px;
+    backdrop-filter: blur(14px);
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .heat-panel::after {
+    content: "HEATMAP"; position: absolute; top: -9px; left: 24px;
+    background: var(--bg-0); padding: 0 10px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--violet); letter-spacing: .3em;
+  }
+  .heat-label {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 14px; color: var(--ink-muted); margin-bottom: 20px;
+  }
+  .heat-grid {
+    display: grid; grid-template-columns: repeat(26, 1fr); gap: 3px;
+    flex: 1;
+  }
+  .heat-cell {
+    aspect-ratio: 1; border-radius: 1px;
+    background: rgba(255,255,255,.03);
+  }
+  .heat-cell[data-lvl="1"] { background: rgba(159, 122, 234, .25); }
+  .heat-cell[data-lvl="2"] { background: rgba(159, 122, 234, .5); }
+  .heat-cell[data-lvl="3"] { background: rgba(159, 122, 234, .75); }
+  .heat-cell[data-lvl="4"] {
+    background: linear-gradient(135deg, #9f7aea, #5eead4);
+    box-shadow: 0 0 8px rgba(159,122,234,.5);
+  }
+  .heat-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 20px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--ink-muted); letter-spacing: .15em;
+  }
+
+  /* ── Crystal panel ── */
+  .crystal-panel {
+    width: 400px; height: 400px;
+    background: linear-gradient(180deg, rgba(25, 20, 45, .8), rgba(15, 12, 30, .9));
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .crystal-panel::after {
+    content: "ARTIFACT · TIER III"; position: absolute; top: -9px; left: 24px;
+    background: var(--bg-0); padding: 0 10px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--cyan); letter-spacing: .3em;
+    z-index: 5;
+  }
+  .crystal-panel .corner {
+    position: absolute; width: 12px; height: 12px;
+    border: 1px solid var(--violet); opacity: .5;
+  }
+  .crystal-panel .corner.tl { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+  .crystal-panel .corner.tr { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
+  .crystal-panel .corner.bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
+  .crystal-panel .corner.br { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
+
+  .crystal-svg {
+    width: 100%; height: 100%; display: block;
+    position: absolute; inset: 0;
+  }
+
+  /* Panel footer overlay */
+  .crystal-foot {
+    position: absolute; bottom: 14px; left: 24px; right: 24px;
+    display: flex; justify-content: space-between;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px; color: var(--ink-muted);
+    letter-spacing: .25em; z-index: 3;
+  }
+  .crystal-foot b { color: var(--cyan); font-weight: 400; }
+
+  /* ── Stats row ── */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding: 24px 32px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    backdrop-filter: blur(14px);
+  }
+  .stat-label {
+    font-family: "JetBrains Mono", monospace; font-size: 9px;
+    color: var(--ink-muted); letter-spacing: .3em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: "Fraunces", serif; font-style: italic; font-weight: 600;
+    font-size: 32px; line-height: 1;
+  }
+  .stat-value .unit {
+    font-size: 12px; color: var(--ink-muted); font-style: normal;
+    margin-left: 4px; font-family: "JetBrains Mono", monospace;
+  }
+
+  /* ── Verse ── */
+  .verse {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 16px; color: var(--ink-muted);
+    max-width: 700px; margin-top: 32px; line-height: 1.6;
+    padding-top: 24px; border-top: 1px solid var(--border);
+  }
+  .verse::before { content: "— "; color: var(--violet); }
+
+  /* ── Variant switcher ── */
+  .variant-bar {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px;
+    background: rgba(20, 20, 28, .85); backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 999px; z-index: 100;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  }
+  .variant-bar button {
+    padding: 8px 16px; border: none; background: transparent;
+    color: rgba(255,255,255,.55); cursor: pointer; border-radius: 999px;
+    font: inherit; transition: all .3s;
+  }
+  .variant-bar button.active { background: rgba(159, 122, 234, .2); color: var(--ink); }
+
+  /* ── SVG crystal styling ── */
+  .crystal-svg .faces polygon {
+    fill-opacity: 0.08;
+    stroke-width: 0.8;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    transition: fill-opacity .6s;
+  }
+  .crystal-svg .edges line,
+  .crystal-svg .edges path {
+    stroke-width: 0.8;
+    stroke-linecap: round;
+    fill: none;
+  }
+  .crystal-svg .inner-lines path {
+    stroke-width: 0.5;
+    fill: none;
+    stroke-linecap: round;
+  }
+
+  /* draw-in animation */
+  .crystal-svg .draw {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: draw 2.2s ease-out forwards;
+  }
+  .crystal-svg .draw.d1 { animation-delay: 0s; }
+  .crystal-svg .draw.d2 { animation-delay: 0.3s; }
+  .crystal-svg .draw.d3 { animation-delay: 0.6s; }
+  .crystal-svg .draw.d4 { animation-delay: 0.9s; }
+  @keyframes draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* Rotating group */
+  .crystal-rotate {
+    transform-origin: 200px 200px;
+    transform-box: view-box;
+    animation: slow-rotate 60s linear infinite;
+  }
+  @keyframes slow-rotate {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Core breathing glow */
+  .core-glow {
+    animation: breathe 4s ease-in-out infinite;
+    transform-origin: 200px 200px;
+    transform-box: view-box;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.9; }
+  }
+
+  /* Shard orbit */
+  .shard-orbit {
+    transform-origin: 200px 200px;
+    transform-box: view-box;
+  }
+  .shard-orbit.o1 { animation: orbit 28s linear infinite; }
+  .shard-orbit.o2 { animation: orbit 40s linear infinite reverse; }
+  .shard-orbit.o3 { animation: orbit 55s linear infinite; }
+  @keyframes orbit {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Floating shards (each rotates on its own) */
+  .shard {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: shard-spin 14s linear infinite;
+  }
+  .shard.holo {
+    filter: drop-shadow(0 0 4px rgba(240, 201, 135, .6));
+  }
+  @keyframes shard-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pulse on shards */
+  .shard-pulse {
+    animation: pulse 3s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  /* Mouse tilt target */
+  .tilt-root {
+    transform-origin: 200px 200px;
+    transform-box: view-box;
+    transition: transform .4s cubic-bezier(.2,.9,.3,1);
+  }
+</style>
+</head>
+<body>
+
+<div class="variant-bar">
+  <button data-tier="1">Tier I — 씨앗</button>
+  <button data-tier="3" class="active">Tier III — 현재</button>
+  <button data-tier="5">Tier V — 만개</button>
+</div>
+
+<div class="hero">
+  <div>
+    <div class="eyebrow">Artifact · Refracted Growth</div>
+    <h1>결정체가 <em>자라고</em> 있어요</h1>
+  </div>
+  <div class="meta">
+    TUESDAY · 16 APR 2026<br/>
+    SEOUL · 14:22 KST
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Heatmap -->
+  <div class="heat-panel">
+    <div class="heat-label">지난 26주의 커밋 — 누적 384건</div>
+    <div class="heat-grid" id="heat"></div>
+    <div class="heat-foot">
+      <span>LESS ←</span>
+      <span>▪ ▪ ▪ ▪</span>
+      <span>→ MORE</span>
+    </div>
+  </div>
+
+  <!-- Crystal -->
+  <div class="crystal-panel" id="panel">
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+
+    <svg class="crystal-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <!-- Core gradient -->
+        <linearGradient id="coreGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#9f7aea" stop-opacity="0.95"/>
+          <stop offset="50%" stop-color="#7c3aed" stop-opacity="0.85"/>
+          <stop offset="100%" stop-color="#5eead4" stop-opacity="0.7"/>
+        </linearGradient>
+
+        <linearGradient id="faceGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#c4b5fd" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#5eead4" stop-opacity="0.06"/>
+        </linearGradient>
+
+        <linearGradient id="faceGrad2" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#9f7aea" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.05"/>
+        </linearGradient>
+
+        <!-- Edge gradient (bright at top) -->
+        <linearGradient id="edgeGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e8e4f0" stop-opacity="0.95"/>
+          <stop offset="60%" stop-color="#9f7aea" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#5eead4" stop-opacity="0.5"/>
+        </linearGradient>
+
+        <!-- Holographic gradient for rare shards -->
+        <linearGradient id="holoGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f472b6"/>
+          <stop offset="50%" stop-color="#f0c987"/>
+          <stop offset="100%" stop-color="#5eead4"/>
+        </linearGradient>
+
+        <!-- Soft halo glow -->
+        <radialGradient id="halo" cx="0.5" cy="0.5">
+          <stop offset="0%" stop-color="#9f7aea" stop-opacity="0.5"/>
+          <stop offset="60%" stop-color="#9f7aea" stop-opacity="0.08"/>
+          <stop offset="100%" stop-color="#9f7aea" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Filter: soft glow for core -->
+        <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+
+      <!-- Halo background -->
+      <circle cx="200" cy="200" r="170" fill="url(#halo)" class="core-glow"/>
+
+      <!-- Orbit rings (background) -->
+      <g stroke="#9f7aea" stroke-opacity="0.12" fill="none" stroke-dasharray="2 4">
+        <ellipse cx="200" cy="200" rx="155" ry="155" class="shard-orbit o3"/>
+      </g>
+      <g stroke="#5eead4" stroke-opacity="0.1" fill="none" stroke-dasharray="1 3">
+        <ellipse cx="200" cy="200" rx="120" ry="120" class="shard-orbit o2"/>
+      </g>
+
+      <!-- Tilt root wraps everything that reacts to mouse -->
+      <g class="tilt-root" id="tiltRoot">
+
+        <!-- Shard orbits (drawn behind and in front of core is handled by order) -->
+        <g class="shard-orbit o3" id="shardsOuter"></g>
+        <g class="shard-orbit o2" id="shardsMid"></g>
+
+        <!-- ═══ Central crystal — hexagonal bipyramid, Obsidian-logo style ═══ -->
+        <g id="crystalCore">
+          <!-- Back faces (faded) -->
+          <g class="faces">
+            <!-- Hex bipyramid: top apex (200,60), bottom apex (200,340), middle hexagon at y=200 -->
+            <!-- Hexagon vertices (around y=200): left (110,200), top-left (155,135), top-right (245,135), right (290,200), bottom-right (245,265), bottom-left (155,265) -->
+
+            <!-- Back-facing faces (darker, behind) -->
+            <polygon points="200,60 110,200 155,135"
+              fill="url(#faceGrad)" stroke="#5eead4" stroke-opacity="0.35" class="draw d1"/>
+            <polygon points="200,60 290,200 245,135"
+              fill="url(#faceGrad2)" stroke="#9f7aea" stroke-opacity="0.55" class="draw d1"/>
+
+            <!-- Front top faces -->
+            <polygon points="200,60 155,135 245,135"
+              fill="url(#faceGrad2)" stroke="#c4b5fd" stroke-opacity="0.75" class="draw d2"/>
+
+            <!-- Bottom back faces -->
+            <polygon points="200,340 110,200 155,265"
+              fill="url(#faceGrad)" stroke="#5eead4" stroke-opacity="0.3" class="draw d3"/>
+            <polygon points="200,340 290,200 245,265"
+              fill="url(#faceGrad2)" stroke="#9f7aea" stroke-opacity="0.5" class="draw d3"/>
+
+            <!-- Bottom front faces -->
+            <polygon points="200,340 155,265 245,265"
+              fill="url(#faceGrad2)" stroke="#c4b5fd" stroke-opacity="0.7" class="draw d4"/>
+
+            <!-- Middle belt (left side) -->
+            <polygon points="110,200 155,135 155,265"
+              fill="url(#faceGrad)" stroke="#9f7aea" stroke-opacity="0.4" class="draw d2"/>
+            <polygon points="290,200 245,135 245,265"
+              fill="url(#faceGrad2)" stroke="#9f7aea" stroke-opacity="0.55" class="draw d2"/>
+
+            <!-- Central vertical prism faces (front) -->
+            <polygon points="155,135 245,135 245,265 155,265"
+              fill="url(#coreGrad)" fill-opacity="0.18" stroke="#c4b5fd" stroke-opacity="0.85" class="draw d3"/>
+          </g>
+
+          <!-- Main silhouette edges (strongest lines) -->
+          <g class="edges" stroke="url(#edgeGrad)">
+            <!-- Outer silhouette -->
+            <path class="draw d1" d="M 200,60 L 290,135 L 290,265 L 200,340 L 110,265 L 110,135 Z"/>
+            <!-- From top apex to hex vertices -->
+            <path class="draw d2" d="M 200,60 L 155,135 M 200,60 L 245,135 M 200,60 L 110,135 M 200,60 L 290,135"/>
+            <!-- From bottom apex to hex vertices -->
+            <path class="draw d3" d="M 200,340 L 155,265 M 200,340 L 245,265 M 200,340 L 110,265 M 200,340 L 290,265"/>
+            <!-- Middle hexagon -->
+            <path class="draw d2" d="M 110,135 L 155,135 L 245,135 L 290,135 M 110,265 L 155,265 L 245,265 L 290,265"/>
+            <!-- Vertical edges of belt -->
+            <path class="draw d3" d="M 155,135 L 155,265 M 245,135 L 245,265 M 110,135 L 110,265 M 290,135 L 290,265"/>
+          </g>
+
+          <!-- Inner detail lines (sketch feel) -->
+          <g class="inner-lines" stroke="#5eead4" stroke-opacity="0.4" id="innerLines">
+            <!-- Center dot -->
+            <circle cx="200" cy="200" r="3" fill="#e8e4f0" fill-opacity="0.9" filter="url(#softGlow)"/>
+            <!-- Internal guide lines from center to vertices, short -->
+            <path class="draw d4" d="M 200,200 L 200,95 M 200,200 L 200,305 M 200,200 L 140,168 M 200,200 L 260,168 M 200,200 L 140,232 M 200,200 L 260,232"/>
+
+            <!-- Sketch-style diagonal accents -->
+            <path class="draw d4" stroke-opacity="0.2" d="M 175,160 L 225,160 M 175,240 L 225,240 M 180,180 L 220,220 M 180,220 L 220,180"/>
+          </g>
+
+          <!-- Tiny facet hatching (Obsidian logo vibe) -->
+          <g stroke="#c4b5fd" stroke-opacity="0.3" stroke-width="0.4" class="draw d4">
+            <line x1="175" y1="90" x2="190" y2="115"/>
+            <line x1="210" y1="115" x2="225" y2="90"/>
+            <line x1="175" y1="310" x2="190" y2="285"/>
+            <line x1="210" y1="285" x2="225" y2="310"/>
+            <line x1="125" y1="155" x2="140" y2="180"/>
+            <line x1="260" y1="180" x2="275" y2="155"/>
+            <line x1="125" y1="245" x2="140" y2="220"/>
+            <line x1="260" y1="220" x2="275" y2="245"/>
+          </g>
+        </g>
+
+        <!-- Inner orbit shards (in front of core) -->
+        <g class="shard-orbit o1" id="shardsInner"></g>
+      </g>
+    </svg>
+
+    <div class="crystal-foot">
+      <span>○ <b>TS · RS · GO</b></span>
+      <span>NEXT TIER @ <b>5 COMMITS</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div>
+    <div class="stat-label">TIER</div>
+    <div class="stat-value" id="st-tier">III<span class="unit">/ V</span></div>
+  </div>
+  <div>
+    <div class="stat-label">STREAK</div>
+    <div class="stat-value" id="st-streak">12<span class="unit">days</span></div>
+  </div>
+  <div>
+    <div class="stat-label">SHARDS</div>
+    <div class="stat-value" id="st-shards">34<span class="unit">fragments</span></div>
+  </div>
+  <div>
+    <div class="stat-label">FRONTIER</div>
+    <div class="stat-value" id="st-frontier">2.4<span class="unit">× coat</span></div>
+  </div>
+</div>
+
+<p class="verse" id="verse">
+  오늘 새로 추가된 다섯 조각은 TypeScript와 Rust로 깎였고,
+  그중 하나는 프론티어 코팅을 입었습니다.
+</p>
+
+
+<script>
+// ───────────────────────────────────────────────
+// Heatmap
+// ───────────────────────────────────────────────
+function generateHeat() {
+  const WEEKS = 26, DAYS = 7;
+  const cells = [];
+  for (let w = 0; w < WEEKS; w++) {
+    for (let d = 0; d < DAYS; d++) {
+      const recency = w / WEEKS;
+      const r = Math.random();
+      let lvl = 0;
+      if (r < 0.3 + recency * 0.35) {
+        const t = Math.random() + recency * 0.4;
+        if (t > 1.1) lvl = 4;
+        else if (t > 0.85) lvl = 3;
+        else if (t > 0.55) lvl = 2;
+        else lvl = 1;
+      }
+      cells.push(lvl);
+    }
+  }
+  for (let i = cells.length - 12; i < cells.length; i++) {
+    if (cells[i] === 0) cells[i] = 2 + Math.floor(Math.random() * 3);
+  }
+  return cells;
+}
+document.getElementById("heat").innerHTML = generateHeat()
+  .map(lvl => `<div class="heat-cell" data-lvl="${lvl}"></div>`).join("");
+
+
+// ───────────────────────────────────────────────
+// Shards — SVG polygons orbiting in three rings
+// ───────────────────────────────────────────────
+const SHAPES = {
+  diamond: (s) => `M 0,${-s} L ${s * .75},0 L 0,${s} L ${-s * .75},0 Z`,
+  hex: (s) => {
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      pts.push(`${(Math.cos(a) * s).toFixed(1)},${(Math.sin(a) * s).toFixed(1)}`);
+    }
+    return "M " + pts.join(" L ") + " Z";
+  },
+  triangle: (s) => `M 0,${-s} L ${s * .87},${s * .5} L ${-s * .87},${s * .5} Z`,
+  sliver: (s) => `M 0,${-s} L ${s * .3},${-s * .3} L ${s * .4},${s} L ${-s * .4},${s} L ${-s * .3},${-s * .3} Z`,
+};
+
+const PALETTE = ["#9f7aea", "#c4b5fd", "#5eead4", "#7c3aed", "#a78bfa"];
+
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+function makeShard(opts) {
+  const { radius, angle, size, shape, color, holo, idx } = opts;
+  const x = 200 + Math.cos(angle) * radius;
+  const y = 200 + Math.sin(angle) * radius;
+  const d = SHAPES[shape](size);
+  const fill = holo ? "url(#holoGrad)" : color;
+  const stroke = holo ? "#f0c987" : "#e8e4f0";
+  const strokeOpacity = holo ? 0.9 : 0.55;
+  // individual spin duration varies
+  const spinDur = 10 + (idx % 5) * 3;
+  const pulseClass = (idx % 4 === 0) ? "shard-pulse" : "";
+  return `
+    <g transform="translate(${x.toFixed(1)}, ${y.toFixed(1)})" class="${pulseClass}">
+      <path d="${d}" fill="${fill}" fill-opacity="${holo ? 0.85 : 0.35}"
+            stroke="${stroke}" stroke-opacity="${strokeOpacity}" stroke-width="0.7"
+            stroke-linejoin="round"
+            class="shard ${holo ? 'holo' : ''}"
+            style="animation-duration: ${spinDur}s;"/>
+    </g>
+  `;
+}
+
+function paintShards(tier) {
+  // tier: 1..5 — controls count, size, holo ratio
+  const config = {
+    1: { counts: [2, 3, 0],  sizeRange: [3, 6],  holoRatio: 0 },
+    2: { counts: [4, 5, 2],  sizeRange: [4, 7],  holoRatio: 0.05 },
+    3: { counts: [8, 10, 6], sizeRange: [5, 9],  holoRatio: 0.12 },
+    4: { counts: [12, 14, 10], sizeRange: [5, 10], holoRatio: 0.2 },
+    5: { counts: [16, 18, 14], sizeRange: [6, 12], holoRatio: 0.28 },
+  }[tier];
+
+  const rand = seededRandom(tier * 1000 + 42);
+  const shapes = Object.keys(SHAPES);
+
+  const rings = [
+    { id: "shardsInner", radius: 95,  count: config.counts[0] },
+    { id: "shardsMid",   radius: 135, count: config.counts[1] },
+    { id: "shardsOuter", radius: 170, count: config.counts[2] },
+  ];
+
+  let total = 0;
+  rings.forEach((ring, ringIdx) => {
+    const el = document.getElementById(ring.id);
+    if (!el) return;
+    const parts = [];
+    for (let i = 0; i < ring.count; i++) {
+      const angle = (Math.PI * 2) * (i / ring.count) + rand() * 0.2;
+      const jitter = (rand() - 0.5) * 18;
+      const size = config.sizeRange[0] + rand() * (config.sizeRange[1] - config.sizeRange[0]);
+      const shape = shapes[Math.floor(rand() * shapes.length)];
+      const color = PALETTE[Math.floor(rand() * PALETTE.length)];
+      const holo = rand() < config.holoRatio;
+      parts.push(makeShard({
+        radius: ring.radius + jitter,
+        angle,
+        size,
+        shape,
+        color,
+        holo,
+        idx: total + i,
+      }));
+    }
+    el.innerHTML = parts.join("");
+    total += ring.count;
+  });
+  return total;
+}
+
+
+// ───────────────────────────────────────────────
+// Tier switcher
+// ───────────────────────────────────────────────
+const TIER_DATA = {
+  1: {
+    label: "I", streak: 1, shardsFromTier: true, frontier: "0.8",
+    verse: "첫 번째 조각이 깎이는 중입니다. 코어는 아직 잠들어 있어요.",
+    crystalStyle: { opacity: 0.4, strokeWidth: 0.6 },
+  },
+  3: {
+    label: "III", streak: 12, frontier: "2.4",
+    verse: "오늘 새로 추가된 다섯 조각은 TypeScript와 Rust로 깎였고, 그중 하나는 프론티어 코팅을 입었습니다.",
+    crystalStyle: { opacity: 1, strokeWidth: 0.8 },
+  },
+  5: {
+    label: "V", streak: 47, frontier: "4.1",
+    verse: "결정체는 다섯 번째 탑에 올랐습니다. 코어가 빛을 내뿜고, 열여섯 조각이 금색 홀로그램으로 코팅되었습니다.",
+    crystalStyle: { opacity: 1, strokeWidth: 1.0 },
+  },
+};
+
+function applyTier(tier) {
+  const total = paintShards(tier);
+  const data = TIER_DATA[tier];
+  document.getElementById("st-tier").innerHTML = `${data.label}<span class="unit">/ V</span>`;
+  document.getElementById("st-streak").innerHTML = `${data.streak}<span class="unit">days</span>`;
+  document.getElementById("st-shards").innerHTML = `${total}<span class="unit">fragments</span>`;
+  document.getElementById("st-frontier").innerHTML = `${data.frontier}<span class="unit">× coat</span>`;
+  document.getElementById("verse").textContent = data.verse;
+
+  // Adjust core opacity for tier I (seed state)
+  const core = document.getElementById("crystalCore");
+  core.style.opacity = data.crystalStyle.opacity;
+  core.querySelectorAll(".edges path, .faces polygon").forEach(el => {
+    el.style.strokeWidth = data.crystalStyle.strokeWidth;
+  });
+
+  // Update tier badge in panel
+  document.querySelector(".crystal-panel").setAttribute(
+    "data-tier-text", `ARTIFACT · TIER ${data.label}`
+  );
+}
+
+// Initial
+applyTier(3);
+
+// Switcher
+document.querySelectorAll(".variant-bar button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".variant-bar button").forEach(b => b.classList.toggle("active", b === btn));
+    const tier = parseInt(btn.dataset.tier, 10);
+    applyTier(tier);
+    // replay draw-in animation on tier change
+    document.querySelectorAll(".crystal-svg .draw").forEach(el => {
+      el.style.animation = "none";
+      // force reflow
+      void el.offsetWidth;
+      el.style.animation = "";
+    });
+  });
+});
+
+
+// ───────────────────────────────────────────────
+// Mouse tilt
+// ───────────────────────────────────────────────
+const panel = document.getElementById("panel");
+const tiltRoot = document.getElementById("tiltRoot");
+let rafId = null;
+let tx = 0, ty = 0;
+
+panel.addEventListener("mousemove", (e) => {
+  const rect = panel.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width - 0.5;
+  const py = (e.clientY - rect.top) / rect.height - 0.5;
+  tx = px; ty = py;
+  if (!rafId) {
+    rafId = requestAnimationFrame(() => {
+      const maxTilt = 14;
+      // Use CSS transform for a gentle 3D-ish lean (skew + rotate)
+      tiltRoot.style.transform =
+        `rotateX(${(-ty * maxTilt).toFixed(2)}deg) rotateY(${(tx * maxTilt).toFixed(2)}deg)`;
+      rafId = null;
+    });
+  }
+});
+panel.addEventListener("mouseleave", () => {
+  tiltRoot.style.transform = "rotateX(0deg) rotateY(0deg)";
+});
+</script>
+
+</body>
+</html>

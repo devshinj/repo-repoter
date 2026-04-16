@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gemstone — 원석에서 보석으로</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg-0: #0c0d12;
+    --bg-1: #16171e;
+    --ink: #ece9e4;
+    --ink-muted: #8a8a96;
+    --border: rgba(255, 255, 255, .08);
+    --panel: rgba(22, 22, 28, .75);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Fraunces", serif;
+    background:
+      radial-gradient(ellipse at 30% 0%, rgba(140, 120, 180, .09), transparent 55%),
+      radial-gradient(ellipse at 75% 85%, rgba(100, 160, 170, .08), transparent 50%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    padding: 72px 64px 64px;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.45'/></svg>");
+    opacity: .03;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* ── Hero ── */
+  .hero {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 40px; padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; letter-spacing: .35em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 44px; font-weight: 300; letter-spacing: -.015em; line-height: 1;
+    font-style: italic;
+  }
+  h1 em { font-style: normal; font-weight: 500;
+    background: linear-gradient(135deg, #c4b5fd, #86efac 60%, #7dd3fc);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .meta {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; color: var(--ink-muted); letter-spacing: .1em;
+    text-align: right; line-height: 1.7;
+  }
+
+  /* ── User fingerprint chip ── */
+  .user-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-top: 12px; padding: 6px 12px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; color: var(--ink-muted); letter-spacing: .15em;
+  }
+  .user-chip .hash-sw {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 440px;
+    gap: 28px;
+    margin-bottom: 28px;
+    align-items: stretch;
+  }
+
+  /* ── Heatmap ── */
+  .heat-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+    backdrop-filter: blur(14px);
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .heat-panel::after {
+    content: "CADENCE · 26w"; position: absolute; top: -9px; left: 24px;
+    background: var(--bg-0); padding: 0 10px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--ink-muted); letter-spacing: .3em;
+  }
+  .heat-label {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 15px; color: var(--ink-muted); margin-bottom: 24px;
+  }
+  .heat-grid {
+    display: grid; grid-template-columns: repeat(26, 1fr); gap: 3px;
+    flex: 1;
+  }
+  .heat-cell {
+    aspect-ratio: 1; border-radius: 1px;
+    background: rgba(255,255,255,.035);
+    transition: background .4s;
+  }
+  .heat-cell[data-lvl="1"] { background: hsl(var(--user-hue, 262) 40% 40% / .5); }
+  .heat-cell[data-lvl="2"] { background: hsl(var(--user-hue, 262) 45% 52% / .75); }
+  .heat-cell[data-lvl="3"] { background: hsl(var(--user-hue, 262) 50% 65% / .9); }
+  .heat-cell[data-lvl="4"] {
+    background: linear-gradient(135deg,
+      hsl(var(--user-hue, 262) 55% 70%),
+      hsl(calc(var(--user-hue, 262) + 60) 50% 68%));
+    box-shadow: 0 0 8px hsl(var(--user-hue, 262) 50% 60% / .45);
+  }
+  .heat-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 22px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--ink-muted); letter-spacing: .15em;
+  }
+
+  /* ── Gemstone panel ── */
+  .gem-panel {
+    width: 440px; height: 440px;
+    background:
+      radial-gradient(ellipse at 50% 40%, rgba(255,255,255,.05), transparent 60%),
+      linear-gradient(180deg, #14141c, #0a0a10);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    perspective: 1200px;
+    transition: box-shadow 0.6s ease;
+  }
+  .gem-panel::before {
+    content: "ARTIFACT · FULL FACET"; position: absolute; top: -9px; left: 24px;
+    background: var(--bg-0); padding: 0 10px;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: hsl(var(--user-hue, 262) 45% 70%); letter-spacing: .3em;
+    z-index: 10;
+  }
+
+  .gem-panel::after {
+    content: ""; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 60%;
+    background: radial-gradient(ellipse at 50% 100%, rgba(0,0,0,.55), transparent 70%);
+    pointer-events: none; z-index: 1;
+  }
+
+  .gem-svg {
+    width: 100%; height: 100%; display: block;
+    position: absolute; inset: 0; z-index: 2;
+  }
+
+  .gem-foot {
+    position: absolute; bottom: 18px; left: 24px; right: 24px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px; color: var(--ink-muted);
+    letter-spacing: .3em; z-index: 3;
+  }
+  .gem-foot .status {
+    color: hsl(var(--user-hue, 262) 50% 72%);
+  }
+  .gem-foot .status::before {
+    content: "●"; margin-right: 6px;
+    animation: status-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes status-pulse {
+    50% { opacity: 0.3; }
+  }
+
+  .gem-panel:hover {
+    box-shadow:
+      0 0 0 1px hsl(var(--user-hue, 262) 50% 60% / .35),
+      0 0 60px hsl(var(--user-hue, 262) 50% 55% / .3),
+      0 0 140px hsl(var(--user-hue, 262) 50% 55% / .12);
+  }
+
+  /* ── Gem rotation — Y-axis, speeds up on hover ── */
+  .gem-world {
+    transform-style: preserve-3d;
+    transform-origin: center center;
+    animation: gem-rotate-y 20s linear infinite;
+    will-change: transform;
+  }
+  @keyframes gem-rotate-y {
+    from { transform: rotateY(-8deg); }
+    to { transform: rotateY(352deg); }
+  }
+  .gem-panel:hover .gem-world {
+    animation-duration: 6s;
+  }
+
+  /* Halo breathe for high-activity (always on in this max-tier mockup) */
+  .halo-outer {
+    animation: halo-breathe 7s ease-in-out infinite;
+    transform-origin: 220px 220px;
+    transform-box: view-box;
+  }
+  @keyframes halo-breathe {
+    0%, 100% { opacity: 0.32; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.05); }
+  }
+
+  /* Light beams */
+  .light-beam {
+    opacity: 0.18;
+    mix-blend-mode: screen;
+    transform-origin: 220px 220px;
+    transform-box: view-box;
+    animation: beam-spin 120s linear infinite;
+  }
+  @keyframes beam-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Sparkles twinkle via inline animate */
+
+  /* ── Metrics strip ── */
+  .metrics {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .metric {
+    background: var(--bg-0);
+    padding: 22px 20px;
+  }
+  .m-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 8px;
+  }
+  .m-value {
+    font-family: "Fraunces", serif; font-weight: 500;
+    font-size: 30px; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .m-value em {
+    font-style: italic; font-weight: 400;
+    background: linear-gradient(135deg,
+      hsl(var(--user-hue, 262) 55% 78%),
+      hsl(calc(var(--user-hue, 262) + 50) 55% 72%));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .m-value .unit {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; color: var(--ink-muted);
+    margin-left: 4px;
+  }
+  .m-sub {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 12px; color: var(--ink-muted); margin-top: 6px;
+  }
+
+  /* ── Verse ── */
+  .verse {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-size: 16px; color: var(--ink-muted);
+    max-width: 720px; margin-top: 36px; line-height: 1.65;
+    padding-top: 22px; border-top: 1px solid var(--border);
+  }
+  .verse::before { content: "— "; color: hsl(var(--user-hue, 262) 50% 70%); }
+  .verse b { color: var(--ink); font-weight: 400; font-style: normal; }
+
+  /* ── Repo swatches ── */
+  .repo-swatches {
+    position: absolute; bottom: 44px; left: 24px;
+    display: flex; gap: 6px; z-index: 4;
+  }
+  .repo-swatches .sw {
+    width: 10px; height: 10px; border-radius: 2px;
+    transform: rotate(45deg);
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div>
+    <div class="eyebrow">Refinery · MMXXVI</div>
+    <h1>당신의 보석은 <em>완전히 연마</em>되었습니다</h1>
+    <div class="user-chip">
+      <span class="hash-sw" id="hashSw"></span>
+      <span id="hashText">JAESEOK · #— · —°</span>
+    </div>
+  </div>
+  <div class="meta">
+    TUESDAY · 16 APR 2026<br/>
+    SEOUL · 14:22 KST<br/>
+    STAGE: FULLY POLISHED
+  </div>
+</div>
+
+<div class="layout">
+
+  <div class="heat-panel">
+    <div class="heat-label">지난 26주간 활동 — 누적 384커밋 · 활동일 127일</div>
+    <div class="heat-grid" id="heat"></div>
+    <div class="heat-foot">
+      <span>LESS</span>
+      <span>▪ ▪ ▪ ▪</span>
+      <span>MORE</span>
+    </div>
+  </div>
+
+  <div class="gem-panel" id="panel">
+    <svg class="gem-svg" viewBox="0 0 440 440" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <!-- Halo -->
+        <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="hsl(var(--user-hue, 262) 55% 68%)" stop-opacity="0.45"/>
+          <stop offset="55%" stop-color="hsl(var(--user-hue, 262) 55% 68%)" stop-opacity="0.08"/>
+          <stop offset="100%" stop-color="hsl(var(--user-hue, 262) 55% 68%)" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Light beams -->
+        <linearGradient id="beam" x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stop-color="hsl(var(--user-hue, 262) 60% 80%)" stop-opacity="0"/>
+          <stop offset="50%" stop-color="hsl(var(--user-hue, 262) 60% 80%)" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="hsl(var(--user-hue, 262) 60% 80%)" stop-opacity="0"/>
+        </linearGradient>
+
+        <!-- Glint -->
+        <linearGradient id="glint" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+        </linearGradient>
+
+        <filter id="softBlur" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.2"/>
+        </filter>
+        <filter id="heavyBlur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="8"/>
+        </filter>
+
+        <!-- Gem inner glow -->
+        <radialGradient id="innerGlow" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="hsl(var(--user-hue, 262) 60% 85%)" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="hsl(var(--user-hue, 262) 60% 85%)" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <ellipse cx="220" cy="220" rx="185" ry="185" fill="url(#halo)" class="halo-outer"/>
+
+      <g class="light-beam" id="beams"></g>
+
+      <!-- Foreignless rotating gem -->
+      <g class="gem-world" id="gemWorld">
+        <!-- inner soft glow behind gem -->
+        <ellipse cx="220" cy="220" rx="115" ry="140" fill="url(#innerGlow)"/>
+        <!-- ground shadow -->
+        <ellipse cx="220" cy="348" rx="95" ry="7" fill="#000" opacity="0.5" filter="url(#softBlur)"/>
+        <!-- Facet groups injected here -->
+        <g id="gemShape"></g>
+      </g>
+
+      <g id="sparkles"></g>
+    </svg>
+
+    <div class="repo-swatches" id="repoSwatches"></div>
+
+    <div class="gem-foot">
+      <span class="status">FULLY POLISHED</span>
+      <span>6 FACET HUES · 0 FRACTURES</span>
+    </div>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="m-label">Gem Size</div>
+    <div class="m-value"><em>384</em></div>
+    <div class="m-sub">누적 커밋</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Streak</div>
+    <div class="m-value"><em>47</em><span class="unit">days</span></div>
+    <div class="m-sub">연속 활동</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Active Days</div>
+    <div class="m-value"><em>127</em><span class="unit">/ 182</span></div>
+    <div class="m-sub">활동일 · 6개월</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Repos</div>
+    <div class="m-value"><em>6</em><span class="unit">hues</span></div>
+    <div class="m-sub">색상 다양성</div>
+  </div>
+  <div class="metric">
+    <div class="m-label">Today</div>
+    <div class="m-value"><em>5</em><span class="unit">new</span></div>
+    <div class="m-sub">오늘의 커밋</div>
+  </div>
+</div>
+
+<p class="verse">
+  거친 원석을 47일 동안 깎아내어, 오늘 당신만의 보석이 완성되었습니다.
+  여섯 개의 저장소가 <b>각자의 빛깔</b>로 파세트에 스며들었고,
+  표면은 광원 아래에서 부드럽게 숨 쉬고 있습니다.
+</p>
+
+<script>
+// ─────────────────────────────────────────────
+// User hash → hue + seeded random
+// ─────────────────────────────────────────────
+function hashString(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
+  return Math.abs(h);
+}
+const USER_SEED = "jaeseok@mrshinj.gmail.com";
+const userHash = hashString(USER_SEED);
+// Jewel hues — vivid but elegant
+const JEWEL_HUES = [262, 220, 195, 170, 140, 340, 30, 285];
+const userHue = JEWEL_HUES[userHash % JEWEL_HUES.length];
+document.documentElement.style.setProperty("--user-hue", userHue);
+
+function seededRandom(seed) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+const rand = seededRandom(userHash);
+
+// Hero chip
+document.getElementById("hashSw").style.background =
+  `linear-gradient(135deg, hsl(${userHue} 55% 65%), hsl(${(userHue + 50) % 360} 50% 65%))`;
+document.getElementById("hashText").textContent =
+  `JAESEOK · #${userHash.toString(16).slice(0, 4).toUpperCase()} · ${userHue}°`;
+
+// ─────────────────────────────────────────────
+// Heatmap
+// ─────────────────────────────────────────────
+function generateHeat() {
+  const WEEKS = 26, DAYS = 7;
+  const cells = [];
+  for (let w = 0; w < WEEKS; w++) {
+    for (let d = 0; d < DAYS; d++) {
+      const recency = w / WEEKS;
+      const r = Math.random();
+      let lvl = 0;
+      if (r < 0.5 + recency * 0.35) {
+        const t = Math.random() + recency * 0.3 + 0.2;
+        if (t > 1.2) lvl = 4;
+        else if (t > 0.9) lvl = 3;
+        else if (t > 0.55) lvl = 2;
+        else lvl = 1;
+      }
+      cells.push(lvl);
+    }
+  }
+  for (let i = cells.length - 47; i < cells.length; i++) {
+    if (cells[i] === 0) cells[i] = 2 + Math.floor(Math.random() * 3);
+  }
+  return cells;
+}
+document.getElementById("heat").innerHTML = generateHeat()
+  .map(lvl => `<div class="heat-cell" data-lvl="${lvl}"></div>`).join("");
+
+// ─────────────────────────────────────────────
+// Repo palette — each repo has its own hue
+// ─────────────────────────────────────────────
+const REPO_COUNT = 6;
+function makeRepoPalette() {
+  const palette = [];
+  for (let i = 0; i < REPO_COUNT; i++) {
+    // Spread hues across the wheel starting from userHue
+    const offset = (360 / REPO_COUNT) * i + (rand() - 0.5) * 15;
+    const h = (userHue + offset) % 360;
+    const s = 55 + rand() * 12;
+    const l = 62 + rand() * 10;
+    palette.push({ h, s, l });
+  }
+  return palette;
+}
+const REPO_PALETTE = makeRepoPalette();
+
+// repo swatches in corner
+document.getElementById("repoSwatches").innerHTML = REPO_PALETTE.map(c =>
+  `<div class="sw" style="background: hsl(${c.h.toFixed(0)} ${c.s.toFixed(0)}% ${c.l.toFixed(0)}%);"></div>`
+).join("");
+
+// Make facet color variants — lighter / darker for shading
+function facetColor(repo, shade) {
+  // shade: "light" | "mid" | "dark" | "deep"
+  const map = {
+    light: { l: repo.l + 12, s: repo.s - 5 },
+    mid:   { l: repo.l,      s: repo.s },
+    dark:  { l: repo.l - 18, s: repo.s + 5 },
+    deep:  { l: repo.l - 32, s: repo.s + 10 },
+  };
+  const m = map[shade];
+  return `hsl(${repo.h.toFixed(0)} ${Math.min(85, Math.max(20, m.s)).toFixed(0)}% ${Math.min(92, Math.max(8, m.l)).toFixed(0)}%)`;
+}
+
+// ─────────────────────────────────────────────
+// Generate organic gemstone shape with irregular facets
+// Each facet gets its own color pulled from REPO_PALETTE
+// ─────────────────────────────────────────────
+function generateGem() {
+  const cx = 220, cy = 225;
+
+  // Organic silhouette: control points around an ellipse with heavy jitter
+  // Build "rings" of vertices at different heights, each with irregular radii
+  const topY  = cy - 100 - rand() * 8;
+  const crownY = cy - 55 - rand() * 10;
+  const beltY  = cy + 5  + rand() * 8;
+  const pavilY = cy + 70 + rand() * 10;
+  const apexY  = cy + 125 + rand() * 6;
+
+  // Count of vertices in each ring (different — asymmetric)
+  const crownN = 6 + Math.floor(rand() * 3);  // 6-8
+  const beltN  = 7 + Math.floor(rand() * 3);  // 7-9
+  const pavilN = 6 + Math.floor(rand() * 3);
+
+  // Build each ring with angular + radial jitter
+  function buildRing(n, radius, y, ringSeed) {
+    const ring = [];
+    for (let i = 0; i < n; i++) {
+      const baseAngle = (Math.PI * 2) * (i / n);
+      const angleJitter = (rand() - 0.5) * 0.35;
+      const angle = baseAngle - Math.PI / 2 + angleJitter;
+      const rJitter = 1 + (rand() - 0.5) * 0.22;
+      const yJitter = (rand() - 0.5) * 8;
+      ring.push({
+        x: cx + Math.cos(angle) * radius * rJitter,
+        y: y + yJitter,
+        angle,
+      });
+    }
+    return ring;
+  }
+
+  const crown = buildRing(crownN, 62 + rand() * 12, crownY);
+  const belt  = buildRing(beltN,  100 + rand() * 14, beltY);
+  const pavil = buildRing(pavilN, 80 + rand() * 12, pavilY);
+
+  // Single top apex & bottom apex — slightly offset
+  const apexTop = { x: cx + (rand() - 0.5) * 14, y: topY };
+  const apexBot = { x: cx + (rand() - 0.5) * 12, y: apexY };
+
+  // Pick a repo color for a facet based on its angle (consistent across frames)
+  function pickRepo(angle, bias = 0) {
+    // Map angle (-PI..PI) to [0..REPO_COUNT)
+    const normalized = ((angle + Math.PI) / (Math.PI * 2) + bias) % 1;
+    return REPO_PALETTE[Math.floor(normalized * REPO_PALETTE.length) % REPO_PALETTE.length];
+  }
+
+  // Shade based on facet angle (faux lighting from top-left)
+  const LIGHT_ANGLE = -Math.PI * 0.72;
+  function shadeFor(facetAngle, zone) {
+    // zone: "crown" | "belt" | "pavil" | "bottom"
+    const cosL = Math.cos(facetAngle - LIGHT_ANGLE);
+    if (zone === "crown") {
+      if (cosL > 0.6) return "light";
+      if (cosL > -0.1) return "mid";
+      return "dark";
+    }
+    if (zone === "belt") {
+      if (cosL > 0.4) return "mid";
+      if (cosL > -0.3) return "dark";
+      return "deep";
+    }
+    if (zone === "pavil") {
+      if (cosL > 0.3) return "dark";
+      return "deep";
+    }
+    return "deep";
+  }
+
+  const polys = [];
+
+  const toPt = (p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+
+  function polyElem(pts, color, strokeOpacity = 0.35) {
+    const pointsStr = pts.map(toPt).join(" ");
+    const strokeC = `hsl(var(--user-hue, 262) 30% 92% / ${strokeOpacity})`;
+    return `<polygon points="${pointsStr}"
+      fill="${color}"
+      stroke="${strokeC}"
+      stroke-width="0.5"
+      stroke-linejoin="round"/>`;
+  }
+
+  // ── Crown facets (apex → two crown vertices) ──
+  for (let i = 0; i < crown.length; i++) {
+    const a = crown[i];
+    const b = crown[(i + 1) % crown.length];
+    const midAngle = (a.angle + b.angle) / 2;
+    const repo = pickRepo(midAngle);
+    const shade = shadeFor(midAngle, "crown");
+    polys.push(polyElem([apexTop, a, b], facetColor(repo, shade), 0.4));
+  }
+
+  // ── Upper girdle (between crown & belt) — subdivided triangles ──
+  // For each crown segment, match it to 1-2 belt vertices
+  for (let i = 0; i < crown.length; i++) {
+    const a = crown[i];
+    const b = crown[(i + 1) % crown.length];
+    // Find belt vertices with closest angle to midpoint
+    const midAngle = (a.angle + b.angle) / 2;
+    const beltIdx = belt.reduce((best, v, idx) => {
+      const diff = Math.abs(((v.angle - midAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      return diff > best.diff ? { idx, diff } : best;
+    }, { idx: 0, diff: 0 }).idx;
+    const bv = belt[beltIdx];
+    const bv2 = belt[(beltIdx + 1) % belt.length];
+    const repo = pickRepo(midAngle, 0.1);
+    const shade = shadeFor(midAngle, "belt");
+    polys.push(polyElem([a, b, bv], facetColor(repo, shade), 0.3));
+    // Second small triangle for organic feel
+    if (rand() > 0.3) {
+      polys.push(polyElem([b, bv, bv2], facetColor(pickRepo(bv.angle), shadeFor(bv.angle, "belt")), 0.25));
+    }
+  }
+
+  // ── Belt facets (bridge between upper belt and pavilion) ──
+  for (let i = 0; i < belt.length; i++) {
+    const a = belt[i];
+    const b = belt[(i + 1) % belt.length];
+    const midAngle = (a.angle + b.angle) / 2;
+    const pavilIdx = pavil.reduce((best, v, idx) => {
+      const diff = Math.abs(((v.angle - midAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      return diff > best.diff ? { idx, diff } : best;
+    }, { idx: 0, diff: 0 }).idx;
+    const pv = pavil[pavilIdx];
+    const pv2 = pavil[(pavilIdx + 1) % pavil.length];
+    const repo = pickRepo(midAngle, 0.2);
+    const shade = shadeFor(midAngle, "belt");
+    polys.push(polyElem([a, b, pv2, pv], facetColor(repo, shade), 0.3));
+  }
+
+  // ── Pavilion facets (pavilion ring → bottom apex) ──
+  for (let i = 0; i < pavil.length; i++) {
+    const a = pavil[i];
+    const b = pavil[(i + 1) % pavil.length];
+    const midAngle = (a.angle + b.angle) / 2;
+    const repo = pickRepo(midAngle, 0.3);
+    const shade = shadeFor(midAngle, "pavil");
+    polys.push(polyElem([a, b, apexBot], facetColor(repo, shade), 0.35));
+  }
+
+  // ── Glint highlight on upper-left crown ──
+  // Find the crown vertex closest to the light angle
+  const glintVertex = crown.reduce((best, v) =>
+    Math.abs(v.angle - LIGHT_ANGLE) < Math.abs(best.angle - LIGHT_ANGLE) ? v : best
+  );
+  const glintNext = crown[(crown.indexOf(glintVertex) + 1) % crown.length];
+
+  const glint = `
+    <polygon points="${toPt(apexTop)} ${toPt(glintVertex)} ${(glintVertex.x + glintNext.x) / 2},${(glintVertex.y + glintNext.y) / 2}"
+             fill="url(#glint)" opacity="0.75"/>
+    <circle cx="${(apexTop.x + glintVertex.x) / 2}" cy="${(apexTop.y + glintVertex.y) / 2 - 3}" r="1.8" fill="#fff" opacity="0.9"/>
+    <circle cx="${glintVertex.x + 4}" cy="${glintVertex.y - 4}" r="1" fill="#fff" opacity="0.7"/>
+  `;
+
+  // ── Sparkle points on additional crown edges (subtle) ──
+  const extraSparks = [];
+  for (let i = 0; i < crown.length; i += 2) {
+    const v = crown[i];
+    if (rand() > 0.5) {
+      extraSparks.push(`<circle cx="${v.x.toFixed(1)}" cy="${v.y.toFixed(1)}" r="0.9" fill="#fff" opacity="${(0.4 + rand() * 0.3).toFixed(2)}"/>`);
+    }
+  }
+
+  return polys.join("") + glint + extraSparks.join("");
+}
+
+document.getElementById("gemShape").innerHTML = generateGem();
+
+// ─────────────────────────────────────────────
+// Light beams (high active-days tier)
+// ─────────────────────────────────────────────
+function makeBeams() {
+  const parts = [];
+  const count = 8;
+  for (let i = 0; i < count; i++) {
+    const angle = (360 / count) * i + (rand() - 0.5) * 10;
+    parts.push(`
+      <rect x="218" y="20" width="4" height="180" fill="url(#beam)"
+            transform="rotate(${angle} 220 220)" filter="url(#heavyBlur)"/>
+    `);
+  }
+  return parts.join("");
+}
+document.getElementById("beams").innerHTML = makeBeams();
+
+// ─────────────────────────────────────────────
+// Twinkling sparkles around gem
+// ─────────────────────────────────────────────
+function makeSparkles() {
+  const parts = [];
+  for (let i = 0; i < 14; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = 150 + rand() * 70;
+    const x = 220 + Math.cos(a) * r;
+    const y = 220 + Math.sin(a) * r * 0.85;
+    const s = 0.7 + rand() * 1.3;
+    const delay = (rand() * 3).toFixed(2);
+    const dur = (2 + rand() * 2.5).toFixed(1);
+    parts.push(`
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s.toFixed(1)}" fill="#fff" opacity="0.5">
+        <animate attributeName="opacity" values="0.1;0.9;0.1" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      </circle>
+    `);
+  }
+  return parts.join("");
+}
+document.getElementById("sparkles").innerHTML = makeSparkles();
+</script>
+
+</body>
+</html>
