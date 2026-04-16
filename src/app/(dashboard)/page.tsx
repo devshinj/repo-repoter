@@ -13,7 +13,7 @@ import { DotIdenticon } from "@/components/data-display/dot-identicon";
 import { LanguageBadge } from "@/components/data-display/language-badge";
 import { GrowthTree } from "@/components/growth-tree/growth-tree";
 import { calcStreak, calcInactiveDays } from "@/components/growth-tree/hooks/use-tree-metrics";
-import type { TreeMetrics } from "@/core/types";
+import type { TreeMetrics, DashboardStats } from "@/core/types";
 import { RefreshCw } from "lucide-react";
 
 function parseUTC(value: string): Date {
@@ -117,15 +117,6 @@ function getGreeting(): string {
   if (hour < 12) return "☀️ 좋은 아침이에요";
   if (hour < 18) return "🌤️ 좋은 오후에요";
   return "👋 수고하셨어요";
-}
-
-interface DashboardStats {
-  todayCommits: number;
-  weekCommits: number;
-  totalReports: number;
-  repoCount: number;
-  totalCommits: number;
-  maxDailyCommits: number;
 }
 
 export default function DashboardPage() {

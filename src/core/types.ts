@@ -109,3 +109,13 @@ export interface TreeMetrics {
   maxDailyCommits: number;
   repos: Array<{ id: number; language: string | null }>;
 }
+
+/** 대시보드 집계 통계 */
+export interface DashboardStats {
+  todayCommits: number;
+  weekCommits: number;
+  totalReports: number;
+  repoCount: number;
+  totalCommits: number;
+  maxDailyCommits: number;
+}

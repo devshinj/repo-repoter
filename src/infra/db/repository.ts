@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { DashboardStats } from "@/core/types";
 
 interface InsertUserInput {
   name: string;
@@ -425,15 +426,6 @@ export function getCommitsByDate(
   authors?: string[]
 ): CacheCommit[] {
   return getCommitsByDateRange(db, repoIds, date, date, authors);
-}
-
-export interface DashboardStats {
-  todayCommits: number;
-  weekCommits: number;
-  totalReports: number;
-  repoCount: number;
-  totalCommits: number;
-  maxDailyCommits: number;
 }
 
 export function getDashboardStats(db: Database.Database, userId: string): DashboardStats {
