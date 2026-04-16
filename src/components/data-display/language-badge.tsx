@@ -6,6 +6,12 @@ interface LanguageBadgeProps {
   language: string | null | undefined;
 }
 
+export function languageColor(lang: string | null | undefined): string {
+  if (!lang) return "#8b949e"; // fallback 회색
+  const colorSet = stringColor(lang);
+  return oklch(colorSet.solid);
+}
+
 export function LanguageBadge({ language }: LanguageBadgeProps) {
   if (!language) return null;
 
