@@ -99,3 +99,13 @@ export interface UserCredential {
   createdAt: string;
   updatedAt: string;
 }
+
+/** 나무 위젯에 필요한 지표 모음 */
+export interface TreeMetrics {
+  totalCommits: number;
+  currentStreak: number;
+  inactiveDays: number;
+  todayCommitted: boolean;
+  maxDailyCommits: number;
+  repos: Array<{ id: number; language: string | null }>;
+}
