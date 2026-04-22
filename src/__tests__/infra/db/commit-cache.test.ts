@@ -46,7 +46,7 @@ describe("commit_cache CRUD", () => {
     db.close();
   });
 
-  it("INSERT OR IGNORE로 중복 SHA를 무시한다", () => {
+  it("INSERT OR IGNORE로 동일 (repo, sha) 중복을 무시한다", () => {
     const commit = makeCommit();
     const inserted1 = insertCommitCache(db, [commit]);
     expect(inserted1).toBe(1);
@@ -54,6 +54,17 @@ describe("commit_cache CRUD", () => {
     expect(inserted2).toBe(0);
     const count = (db.prepare("SELECT COUNT(*) as c FROM commit_cache").get() as any).c;
     expect(count).toBe(1);
+  });
+
+  it("같은 SHA라도 repository_id가 다르면 각각 저장된다", () => {
+    const sha = "abc123def456abc123def456abc123def456abc1";
+    const inserted = insertCommitCache(db, [
+      makeCommit({ sha, repositoryId: 1 }),
+      makeCommit({ sha, repositoryId: 2 }),
+    ]);
+    expect(inserted).toBe(2);
+    const count = (db.prepare("SELECT COUNT(*) as c FROM commit_cache").get() as any).c;
+    expect(count).toBe(2);
   });
 
   it("벌크 INSERT가 트랜잭션으로 동작한다", () => {

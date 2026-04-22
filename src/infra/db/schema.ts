@@ -66,14 +66,15 @@ export function createTables(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS commit_cache (
-      sha TEXT PRIMARY KEY,
       repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      sha TEXT NOT NULL,
       branch TEXT NOT NULL,
       author TEXT NOT NULL,
       message TEXT NOT NULL,
       committed_date TEXT NOT NULL,
       committed_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (repository_id, sha)
     );
 
     CREATE INDEX IF NOT EXISTS idx_commit_cache_repo_date
@@ -223,6 +224,34 @@ export function migrateSchema(db: Database.Database): void {
     // 기존 저장소: clone_path 유무로 상태 보정
     db.exec("UPDATE repositories SET clone_status = 'ready' WHERE clone_path IS NOT NULL");
     db.exec("UPDATE repositories SET clone_status = 'pending' WHERE clone_path IS NULL");
+  }
+
+  // commit_cache PK를 sha → (repository_id, sha) 복합키로 마이그레이션
+  // 같은 clone_url을 여러 사용자가 등록하면 repository_id가 달라 동일 sha의 별도 row가 필요하기 때문
+  const cacheColumns = db.prepare("PRAGMA table_info(commit_cache)").all() as any[];
+  const shaCol = cacheColumns.find((c: any) => c.name === "sha");
+  const repoIdCol = cacheColumns.find((c: any) => c.name === "repository_id");
+
+  if (shaCol?.pk === 1 && repoIdCol?.pk === 0) {
+    db.exec(`
+      CREATE TABLE commit_cache_new (
+        repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        sha TEXT NOT NULL,
+        branch TEXT NOT NULL,
+        author TEXT NOT NULL,
+        message TEXT NOT NULL,
+        committed_date TEXT NOT NULL,
+        committed_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (repository_id, sha)
+      );
+      INSERT INTO commit_cache_new (repository_id, sha, branch, author, message, committed_date, committed_at, created_at)
+        SELECT repository_id, sha, branch, author, message, committed_date, committed_at, created_at FROM commit_cache;
+      DROP TABLE commit_cache;
+      ALTER TABLE commit_cache_new RENAME TO commit_cache;
+      CREATE INDEX IF NOT EXISTS idx_commit_cache_repo_date
+        ON commit_cache(repository_id, committed_date);
+    `);
   }
 
   // user_credentials: 기존 git credential에 GitHub 기본 metadata 적용
