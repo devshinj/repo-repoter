@@ -15,6 +15,11 @@ export const palette = {
   water: "#7ec9f0",
   firefly: "#fff6a8",
   leafFallen: "#a68a3e",
+  grassDark: "#4a7f2a",
+  grassLight: "#7bb651",
+  groundShadow: "#e8e1d1",
+  cloudLight: "#eef2f8",
+  cloudShadow: "#c4cedd",
 } as const;
 
 export type PaletteKey = keyof typeof palette;
