@@ -189,9 +189,13 @@ export default function ReportDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(report.content);
-                  toast.success("클립보드에 복사되었습니다");
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(report.content);
+                    toast.success("클립보드에 복사되었습니다");
+                  } catch {
+                    toast.error("클립보드 복사에 실패했습니다. HTTPS 환경에서만 동작하므로 본문을 직접 선택해 복사해주세요.");
+                  }
                 }}
               >
                 <ClipboardCopy className="h-4 w-4 mr-1" />복사

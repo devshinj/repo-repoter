@@ -47,7 +47,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
   const [reportContent, setReportContent] = useState("");
   const [reportGenerating, setReportGenerating] = useState(false);
   const [reportSaving, setReportSaving] = useState(false);
-  const [reportViewMode, setReportViewMode] = useState<"edit" | "preview">("edit");
+  const [reportViewMode, setReportViewMode] = useState<"edit" | "preview">("preview");
   const [showDateInTitle, setShowDateInTitle] = useState(false);
   const [reportDate, setReportDate] = useState("");
 
@@ -100,7 +100,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     setReportRepo(null);
     setReportTitle("");
     setReportContent("");
-    setReportViewMode("edit");
+    setReportViewMode("preview");
     setShowDateInTitle(false);
     setReportDate("");
   }
@@ -115,7 +115,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     try {
       await navigator.clipboard.writeText(`# ${getFinalTitle()}\n\n${reportContent}`);
       toast.success("보고서가 클립보드에 복사되었습니다");
-    } catch { toast.error("클립보드 복사에 실패했습니다"); }
+    } catch { toast.error("클립보드 복사에 실패했습니다. HTTPS 환경에서만 동작하므로 본문을 직접 선택해 복사해주세요."); }
     finally { setReportSaving(false); }
   }
 
