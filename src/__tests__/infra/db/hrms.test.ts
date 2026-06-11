@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
-import { createTables } from "@/infra/db/schema";
+import { createTables, migrateSchema } from "@/infra/db/schema";
 import {
   upsertHrmsApiKey,
   getHrmsApiKey,
@@ -19,6 +19,7 @@ function createTestDb(): Database.Database {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   createTables(db);
+  migrateSchema(db);
   return db;
 }
 

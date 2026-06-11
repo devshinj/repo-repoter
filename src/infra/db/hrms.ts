@@ -67,7 +67,7 @@ export function getMappingsByUser(db: Database.Database, userId: string) {
 
   return mappings.map((m: any) => {
     const repos = db.prepare(
-      `SELECT r.id, r.owner, r.repo
+      `SELECT r.id, r.owner, r.repo, r.label
        FROM hrms_mapping_repos mr
        JOIN repositories r ON r.id = mr.repository_id
        WHERE mr.mapping_id = ?`
@@ -84,7 +84,7 @@ export function getMappingById(db: Database.Database, id: number) {
   if (!mapping) return null;
 
   const repos = db.prepare(
-    `SELECT r.id, r.owner, r.repo
+    `SELECT r.id, r.owner, r.repo, r.label
      FROM hrms_mapping_repos mr
      JOIN repositories r ON r.id = mr.repository_id
      WHERE mr.mapping_id = ?`
