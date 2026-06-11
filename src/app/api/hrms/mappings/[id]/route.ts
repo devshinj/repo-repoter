@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
 import { getMappingById, updateMapping, deleteMapping } from "@/infra/db/hrms";
+import { refreshJob } from "@/scheduler/hrms-scheduler";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -24,6 +25,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     repositoryIds: body.repositoryIds,
   });
 
+  refreshJob(mappingId);
   return NextResponse.json({ message: "Mapping updated" });
 }
 
@@ -41,5 +43,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   }
 
   deleteMapping(db, mappingId);
+  refreshJob(mappingId);
   return NextResponse.json({ message: "Mapping deleted" });
 }

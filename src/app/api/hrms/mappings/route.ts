@@ -4,6 +4,7 @@ import { getDb } from "@/infra/db/connection";
 import { getHrmsApiKey, getMappingsByUser, insertMapping } from "@/infra/db/hrms";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { getProject } from "@/infra/hrms/hrms-client";
+import { refreshJob } from "@/scheduler/hrms-scheduler";
 
 export async function GET() {
   const session = await auth();
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
       cronTime: cronTime ?? "0 9 * * 1-5",
       repositoryIds,
     });
+
+    refreshJob(mappingId);
 
     return NextResponse.json({ id: mappingId, message: "Mapping created" }, { status: 201 });
   } catch (err: any) {
