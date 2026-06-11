@@ -39,11 +39,11 @@ export default function HrmsPage() {
     loadData();
   }, [loadData]);
 
-  async function handleRegister(mappingId: number) {
+  async function handleRegister(mappingId: number, targetDate?: string) {
     const res = await fetch("/api/hrms/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mappingId }),
+      body: JSON.stringify({ mappingId, targetDate }),
     });
     const data = await res.json();
     if (!res.ok) alert(data.error);

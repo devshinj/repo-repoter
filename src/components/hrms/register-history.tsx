@@ -1,44 +1,77 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 
 interface RegisterHistoryProps {
   logs: any[];
 }
 
+const hrmsTaskUrl = "https://hrms.cudo.co.kr:9700/tasks";
+
 export function RegisterHistory({ logs }: RegisterHistoryProps) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
   if (logs.length === 0) {
     return <p className="text-sm text-muted-foreground py-4 text-center">등록 이력이 없습니다.</p>;
   }
 
   return (
-    <div className="border rounded-md overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="text-left px-3 py-2 font-medium">날짜</th>
-            <th className="text-left px-3 py-2 font-medium">프로젝트</th>
-            <th className="text-left px-3 py-2 font-medium">상태</th>
-            <th className="text-left px-3 py-2 font-medium">제목</th>
-          </tr>
-        </thead>
-        <tbody>
-          {logs.map((log: any) => (
-            <tr key={log.id} className="border-t">
-              <td className="px-3 py-2">{log.target_date}</td>
-              <td className="px-3 py-2">{log.hrms_project_name}</td>
-              <td className="px-3 py-2">
-                <Badge variant={log.status === "success" ? "default" : "destructive"}>
-                  {log.status === "success" ? "성공" : "실패"}
+    <div className="space-y-2">
+      {logs.map((log: any) => {
+        const isExpanded = expandedId === log.id;
+        const isSuccess = log.status === "success";
+
+        return (
+          <Card key={log.id} className="overflow-hidden">
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                onClick={() => setExpandedId(isExpanded ? null : log.id)}
+              >
+                <Badge variant={isSuccess ? "default" : "destructive"} className="shrink-0">
+                  {isSuccess ? "성공" : "실패"}
                 </Badge>
-              </td>
-              <td className="px-3 py-2 truncate max-w-xs">
-                {log.status === "error" ? log.error_message : log.title}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                <span className="text-xs text-muted-foreground shrink-0">{log.target_date}</span>
+                <span className="text-sm font-medium truncate flex-1">
+                  {log.hrms_project_name}
+                </span>
+                {isSuccess && log.hrms_task_id && (
+                  <a
+                    href={hrmsTaskUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
+                {isExpanded
+                  ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                  : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                }
+              </button>
+              {isExpanded && (
+                <div className="px-4 pb-3 border-t">
+                  {isSuccess ? (
+                    <div className="pt-3 space-y-2">
+                      <p className="text-sm font-medium">{log.title}</p>
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{log.description}</pre>
+                    </div>
+                  ) : (
+                    <p className="pt-3 text-sm text-destructive">{log.error_message}</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
