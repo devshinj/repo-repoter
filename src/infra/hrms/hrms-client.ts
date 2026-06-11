@@ -133,3 +133,42 @@ export async function listCommonCodes(apiKey: string, groupCode?: string) {
   const result = await callMcpTool(apiKey, "list_common_codes", args);
   return result.data;
 }
+
+export interface HrmsTask {
+  id: number;
+  title: string;
+  status: string;
+  dueDate: string | null;
+  projectId: number;
+}
+
+export async function listTasks(apiKey: string, params: { projectId?: number; dueFrom?: string; dueTo?: string }): Promise<HrmsTask[]> {
+  const args: Record<string, unknown> = { scope: "createdByMe" };
+  if (params.projectId) args.projectId = params.projectId;
+  if (params.dueFrom) args.dueFrom = params.dueFrom;
+  if (params.dueTo) args.dueTo = params.dueTo;
+  const result = await callMcpTool(apiKey, "list_tasks", args);
+  return result.data?.tasks ?? result.data ?? [];
+}
+
+export interface UpdateTaskParams {
+  id: number;
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  dueDate?: string;
+  timeSpentMinutes?: number;
+}
+
+export async function updateTask(apiKey: string, params: UpdateTaskParams): Promise<any> {
+  const args: Record<string, unknown> = { id: params.id };
+  if (params.title !== undefined) args.title = params.title;
+  if (params.description !== undefined) args.description = params.description;
+  if (params.status !== undefined) args.status = params.status;
+  if (params.priority !== undefined) args.priority = params.priority;
+  if (params.dueDate !== undefined) args.dueDate = params.dueDate;
+  if (params.timeSpentMinutes !== undefined) args.timeSpentMinutes = params.timeSpentMinutes;
+  const result = await callMcpTool(apiKey, "update_task", args);
+  return result.data;
+}

@@ -6,10 +6,11 @@ import {
   getMappingById,
   hasSuccessLog,
   insertTaskLog,
+  getLastSuccessLog,
 } from "@/infra/db/hrms";
 import { getCommitsByDateRange } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { createTask } from "@/infra/hrms/hrms-client";
+import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
 
   const date = targetDate ?? getYesterdayDate();
 
+  // 중복 체크: 로컬 로그 기반 + force가 아닌 경우 안내
   if (hasSuccessLog(db, mappingId, date) && !force) {
     return NextResponse.json({ duplicate: true, date }, { status: 200 });
   }
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "No commits found", skipped: true });
   }
 
-  // Group commits by repository
+  // 저장소별 커밋 그룹핑
   const repoMap = new Map<number, { repoName: string; commits: CommitRecord[] }>();
   for (const repo of mapping.repos) {
     repoMap.set(repo.id, {
@@ -105,20 +107,73 @@ export async function POST(request: NextRequest) {
     const title = generated.title;
     const description = generated.description;
 
-    const created = await createTask(apiKey, {
-      title,
-      description,
-      projectId: mapping.hrms_project_id,
-      assigneeId: keyRow.hrms_user_id ?? undefined,
-      status: "done",
-      priority: "medium",
-      dueDate: date,
-      timeSpentMinutes: estimatedMinutes,
-    });
+    // force 모드: 기존 태스크 찾아서 update, 없으면 create
+    let hrmsTaskId: number;
+    let action: "created" | "updated";
+
+    if (force) {
+      // 로컬 로그에서 기존 HRMS task ID 조회
+      const prevLog = getLastSuccessLog(db, mappingId, date);
+      let existingTaskId = prevLog?.hrms_task_id ?? null;
+
+      // 로컬 로그에 없으면 HRMS 서버에서 검색
+      if (!existingTaskId) {
+        try {
+          const tasks = await listTasks(apiKey, {
+            projectId: mapping.hrms_project_id,
+            dueFrom: date,
+            dueTo: date,
+          });
+          if (tasks.length > 0) {
+            existingTaskId = tasks[0].id;
+          }
+        } catch {
+          // 검색 실패 시 새로 생성
+        }
+      }
+
+      if (existingTaskId) {
+        await updateTask(apiKey, {
+          id: existingTaskId,
+          title,
+          description,
+          status: "done",
+          timeSpentMinutes: estimatedMinutes,
+        });
+        hrmsTaskId = existingTaskId;
+        action = "updated";
+      } else {
+        const created = await createTask(apiKey, {
+          title,
+          description,
+          projectId: mapping.hrms_project_id,
+          assigneeId: keyRow.hrms_user_id ?? undefined,
+          status: "done",
+          priority: "medium",
+          dueDate: date,
+          timeSpentMinutes: estimatedMinutes,
+        });
+        hrmsTaskId = created.id;
+        action = "created";
+      }
+    } else {
+      const created = await createTask(apiKey, {
+        title,
+        description,
+        projectId: mapping.hrms_project_id,
+        assigneeId: keyRow.hrms_user_id ?? undefined,
+        status: "done",
+        priority: "medium",
+        dueDate: date,
+        timeSpentMinutes: estimatedMinutes,
+      });
+      hrmsTaskId = created.id;
+      action = "created";
+    }
 
     insertTaskLog(db, {
       mappingId,
-      hrmsTaskId: created.id,
+      hrmsTaskId,
       targetDate: date,
       title,
       description,
@@ -127,10 +182,11 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      message: "Task registered",
-      hrmsTaskId: created.id,
+      message: action === "updated" ? "Task updated" : "Task registered",
+      hrmsTaskId,
       title,
       estimatedMinutes,
+      action,
     }, { status: 201 });
   } catch (err: any) {
     insertTaskLog(db, {

@@ -65,6 +65,8 @@ export default function HrmsPage() {
       setDuplicateDialog({ mappingId, targetDate: data.date });
     } else if (data.skipped) {
       toast.info("해당 날짜에 커밋이 없어 등록을 건너뛰었습니다.");
+    } else if (data.action === "updated") {
+      toast.success(`기존 업무 업데이트 완료 (HRMS #${data.hrmsTaskId})`);
     } else {
       toast.success(`업무 등록 완료 (HRMS #${data.hrmsTaskId})`);
     }
@@ -172,9 +174,9 @@ export default function HrmsPage() {
       <AlertDialog open={!!duplicateDialog} onOpenChange={(open) => !open && setDuplicateDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>중복 등록 확인</AlertDialogTitle>
+            <AlertDialogTitle>기존 업무 업데이트</AlertDialogTitle>
             <AlertDialogDescription>
-              {duplicateDialog?.targetDate}에 이미 업무가 등록되어 있습니다. 다시 등록하면 HRMS에 동일 날짜의 업무가 중복 생성됩니다. 그래도 등록하시겠습니까?
+              {duplicateDialog?.targetDate}에 이미 등록된 업무가 있습니다. 당일 전체 커밋을 기반으로 기존 업무의 제목과 내용을 업데이트합니다. 진행하시겠습니까?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

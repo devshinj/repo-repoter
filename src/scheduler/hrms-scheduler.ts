@@ -4,11 +4,12 @@ import {
   getAutoRegisterMappings,
   getMappingById,
   hasSuccessLog,
+  getLastSuccessLog,
   insertTaskLog,
 } from "@/infra/db/hrms";
 import { getCommitsByDateRange } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { createTask } from "@/infra/hrms/hrms-client";
+import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";

@@ -165,6 +165,12 @@ export function hasSuccessLog(db: Database.Database, mappingId: number, targetDa
   return !!row;
 }
 
+export function getLastSuccessLog(db: Database.Database, mappingId: number, targetDate: string) {
+  return db.prepare(
+    "SELECT hrms_task_id FROM hrms_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' ORDER BY created_at DESC LIMIT 1"
+  ).get(mappingId, targetDate) as { hrms_task_id: number | null } | undefined ?? null;
+}
+
 export function getAutoRegisterMappings(db: Database.Database) {
   return db.prepare(
     `SELECT pm.*, hak.encrypted_key
