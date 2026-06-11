@@ -56,19 +56,19 @@ async function executeRegistration(mappingId: number): Promise<void> {
     });
   }
   for (const c of cacheCommits) {
-    const entry = repoMap.get(c.repository_id);
+    const entry = repoMap.get(c.repositoryId);
     if (entry) {
       entry.commits.push({
         sha: c.sha,
         message: c.message,
         author: c.author,
-        date: c.committed_at,
+        date: c.committedAt,
         repoOwner: "",
         repoName: "",
         branch: c.branch,
-        filesChanged: [],
-        additions: 0,
-        deletions: 0,
+        filesChanged: c.filesChanged,
+        additions: c.additions,
+        deletions: c.deletions,
       });
     }
   }
