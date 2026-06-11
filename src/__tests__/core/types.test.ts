@@ -3,10 +3,10 @@ import { describe, it, expectTypeOf } from "vitest";
 import type { Repository, UserCredential, SyncLog } from "@/core/types";
 
 describe("Repository type", () => {
-  it("should have userId, cloneUrl, clonePath fields", () => {
+  it("should have userId, cloneUrl, syncStatus fields", () => {
     expectTypeOf<Repository>().toHaveProperty("userId");
     expectTypeOf<Repository>().toHaveProperty("cloneUrl");
-    expectTypeOf<Repository>().toHaveProperty("clonePath");
+    expectTypeOf<Repository>().toHaveProperty("syncStatus");
   });
 });
 

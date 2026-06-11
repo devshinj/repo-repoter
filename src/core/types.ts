@@ -37,8 +37,7 @@ export interface Repository {
   updatedAt: string;
   userId: string;
   cloneUrl: string;
-  clonePath: string | null;
-  cloneStatus: "pending" | "cloning" | "caching" | "ready" | "error";
+  syncStatus: "pending" | "syncing" | "ready" | "error";
   label: string | null;
 }
 
