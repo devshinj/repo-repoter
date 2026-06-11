@@ -38,7 +38,7 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
                 </Badge>
                 <span className="text-xs text-muted-foreground shrink-0">{log.target_date}</span>
                 <span className="text-sm font-medium truncate flex-1">
-                  {log.hrms_project_name}
+                  {log.hrms_project_name} - {log.status === "success" ? log.title : log.error_message}
                 </span>
                 {isSuccess && log.hrms_task_id && (
                   <a

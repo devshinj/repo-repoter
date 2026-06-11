@@ -9,7 +9,7 @@ import {
 import { getCommitsByDateRange } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask } from "@/infra/hrms/hrms-client";
-import { generateHrmsTaskDescription } from "@/infra/gemini/gemini-client";
+import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
 
@@ -75,16 +75,17 @@ async function executeRegistration(mappingId: number): Promise<void> {
   const repoCommits = Array.from(repoMap.values()).filter((r) => r.commits.length > 0);
   const allCommits = repoCommits.flatMap((r) => r.commits);
   const estimatedMinutes = estimateWorkMinutes(allCommits);
-  const title = `[${mapping.hrms_project_name}] ${date} 개발 업무`;
 
   try {
     const apiKey = decrypt(keyRow.encrypted_key);
-    const description = await generateHrmsTaskDescription(
+    const generated = await generateHrmsTaskContent(
       mapping.hrms_project_name,
       date,
       repoCommits,
       estimatedMinutes,
     );
+    const title = generated.title;
+    const description = generated.description;
 
     const created = await createTask(apiKey, {
       title,
@@ -113,7 +114,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       mappingId,
       hrmsTaskId: null,
       targetDate: date,
-      title,
+      title: "등록 실패",
       description: "",
       status: "error",
       errorMessage: err.message,

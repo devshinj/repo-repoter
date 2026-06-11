@@ -1,6 +1,6 @@
 // src/__tests__/infra/gemini-client.test.ts
 import { describe, it, expect } from "vitest";
-import { buildAnalysisPrompt, parseAnalysisResponse, buildHrmsTaskPrompt } from "@/infra/gemini/gemini-client";
+import { buildAnalysisPrompt, parseAnalysisResponse, buildHrmsTaskPrompt, parseHrmsTaskResponse } from "@/infra/gemini/gemini-client";
 import type { CommitRecord } from "@/core/types";
 
 const sampleCommits: CommitRecord[] = [
@@ -87,6 +87,7 @@ describe("buildHrmsTaskPrompt", () => {
     expect(prompt).toContain("cuvia-frontend");
     expect(prompt).toContain("cuvia-backend");
     expect(prompt).toContain("120");
+    expect(prompt).toContain("TITLE:");
     expect(prompt).toContain("추상화·의역 금지");
     expect(prompt).toContain("feat: add user login page");
   });
@@ -100,5 +101,21 @@ describe("buildHrmsTaskPrompt", () => {
     expect(prompt).toContain("2건");
     expect(prompt).toContain("feat: add user login page");
     expect(prompt).toContain("fix: resolve auth redirect bug");
+  });
+});
+
+describe("parseHrmsTaskResponse", () => {
+  it("extracts title and description", () => {
+    const text = "TITLE: HRMS 업무 자동 등록 구현\n\n- 태스크 생성 API 연동\n- 스케줄러 구현";
+    const result = parseHrmsTaskResponse(text);
+    expect(result.title).toBe("HRMS 업무 자동 등록 구현");
+    expect(result.description).toContain("태스크 생성 API 연동");
+  });
+
+  it("falls back to default title when TITLE: is missing", () => {
+    const text = "- 작업 내용 1\n- 작업 내용 2";
+    const result = parseHrmsTaskResponse(text);
+    expect(result.title).toBe("업무 수행");
+    expect(result.description).toContain("작업 내용 1");
   });
 });

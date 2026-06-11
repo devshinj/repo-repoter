@@ -157,6 +157,10 @@ ${repoSections}
 
 추정 총 작업 시간: 약 ${estimatedMinutes}분
 
+출력 형식:
+첫 줄은 반드시 "TITLE: " 로 시작하는 업무 제목 (작업 내역을 아우르는 20자 이내 요약, 프로젝트명·날짜 포함 금지)
+다음 줄부터 업무 상세 내용
+
 작성 규칙:
 - 커밋 메시지에 나온 구체적인 작업 내용을 그대로 반영 (추상화·의역 금지)
 - "feat:", "fix:", "refactor:" 등 prefix는 제거하고 내용만 기재
@@ -166,16 +170,36 @@ ${repoSections}
 - 한국어, 텍스트만 응답 (JSON/마크다운 코드블록 불필요)
 - 저장소명 언급 불필요
 
-나쁜 예 (추상적): "프롬프트 엔지니어링 및 관련 로직 수정"
-좋은 예 (구체적): "클립보드 복사 실패 시 안내 메시지 개선 및 보고서 기본 뷰를 preview로 변경"`;
+제목 예시:
+- "HRMS 업무 자동 등록 기능 구현"
+- "클립보드 복사 개선 및 보고서 뷰 변경"
+
+나쁜 본문 예 (추상적): "프롬프트 엔지니어링 및 관련 로직 수정"
+좋은 본문 예 (구체적): "클립보드 복사 실패 시 안내 메시지 개선 및 보고서 기본 뷰를 preview로 변경"`;
 }
 
-export async function generateHrmsTaskDescription(
+export function parseHrmsTaskResponse(text: string): { title: string; description: string } {
+  const lines = text.split("\n");
+  let title = "업무 수행";
+  let contentStartIndex = 0;
+
+  if (lines[0]?.startsWith("TITLE:")) {
+    title = lines[0].replace("TITLE:", "").trim();
+    contentStartIndex = 1;
+    while (contentStartIndex < lines.length && lines[contentStartIndex].trim() === "") {
+      contentStartIndex++;
+    }
+  }
+
+  return { title, description: lines.slice(contentStartIndex).join("\n").trim() };
+}
+
+export async function generateHrmsTaskContent(
   projectName: string,
   date: string,
   repoCommits: Array<{ repoName: string; commits: CommitRecord[] }>,
   estimatedMinutes: number,
-): Promise<string> {
+): Promise<{ title: string; description: string }> {
   const genai = getClient();
   const prompt = buildHrmsTaskPrompt(projectName, date, repoCommits, estimatedMinutes);
 
@@ -186,5 +210,5 @@ export async function generateHrmsTaskDescription(
     })
   );
 
-  return result.text ?? "";
+  return parseHrmsTaskResponse(result.text ?? "");
 }
