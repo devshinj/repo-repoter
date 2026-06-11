@@ -173,7 +173,7 @@ export default function ReposPage() {
 
   // 클론/캐싱 진행 중인 저장소가 있으면 3초마다 폴링
   useEffect(() => {
-    const hasPending = repos.some((r: any) => r.clone_status && r.clone_status !== "ready" && r.clone_status !== "error");
+    const hasPending = repos.some((r: any) => r.sync_status && r.sync_status !== "ready" && r.sync_status !== "error");
     if (!hasPending) return;
     const timer = setInterval(fetchRepos, 3000);
     return () => clearInterval(timer);
@@ -481,14 +481,12 @@ export default function ReposPage() {
                       )}
                       <LanguageBadge language={repo.primary_language} />
                       <div className="flex gap-1">
-                        {repo.clone_status === "ready" ? (
+                        {repo.sync_status === "ready" ? (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0">준비됨</Badge>
-                        ) : repo.clone_status === "error" ? (
+                        ) : repo.sync_status === "error" ? (
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0">오류</Badge>
-                        ) : repo.clone_status === "caching" ? (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 animate-pulse">커밋 캐싱 중...</Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 animate-pulse">클론 중...</Badge>
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 animate-pulse">동기화 중...</Badge>
                         )}
                       </div>
                     </div>
@@ -545,7 +543,7 @@ export default function ReposPage() {
                       size="sm"
                       className="h-8 w-8 p-0"
                       onClick={(e) => handleSync(e, repo.id)}
-                      disabled={syncing === repo.id || repo.clone_status !== "ready"}
+                      disabled={syncing === repo.id || repo.sync_status !== "ready"}
                       title="지금 동기화"
                     >
                       <RefreshCw className={`h-4 w-4 ${syncing === repo.id ? "animate-spin" : ""}`} />
