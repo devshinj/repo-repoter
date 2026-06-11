@@ -136,3 +136,52 @@ ${diff.slice(0, 3000)}
 
   return result.text ?? commit.message;
 }
+
+export function buildHrmsTaskPrompt(
+  projectName: string,
+  date: string,
+  repoCommits: Array<{ repoName: string; commits: CommitRecord[] }>,
+  estimatedMinutes: number,
+): string {
+  const repoSections = repoCommits.map(({ repoName, commits }) => {
+    const totalAdd = commits.reduce((s, c) => s + c.additions, 0);
+    const totalDel = commits.reduce((s, c) => s + c.deletions, 0);
+    const commitLines = commits
+      .map((c) => `- [${c.sha.slice(0, 7)}] ${c.message} (+${c.additions}/-${c.deletions})`)
+      .join("\n");
+    return `## ${repoName} (${commits.length}건, +${totalAdd}/-${totalDel})\n${commitLines}`;
+  }).join("\n\n");
+
+  return `HRMS 프로젝트 "${projectName}"에서 ${date}에 수행된 작업을 업무 보고 형식으로 정리해주세요.
+
+[저장소별 커밋 목록]
+${repoSections}
+
+추정 총 작업 시간: 약 ${estimatedMinutes}분
+
+규칙:
+- 관련 커밋을 논리적 작업 단위로 묶어 정리
+- 각 작업 항목은 "- " 로 시작
+- 마지막에 "추정 작업 시간: 약 N시간 M분" 을 기재 (${estimatedMinutes}분 기준)
+- 한국어로 작성, 저장소명 언급 불필요 — 프로젝트 전체 관점에서 서술
+- 텍스트만 응답 (JSON/마크다운 코드블록 불필요)`;
+}
+
+export async function generateHrmsTaskDescription(
+  projectName: string,
+  date: string,
+  repoCommits: Array<{ repoName: string; commits: CommitRecord[] }>,
+  estimatedMinutes: number,
+): Promise<string> {
+  const genai = getClient();
+  const prompt = buildHrmsTaskPrompt(projectName, date, repoCommits, estimatedMinutes);
+
+  const result = await withRetry(() =>
+    genai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: prompt,
+    })
+  );
+
+  return result.text ?? "";
+}

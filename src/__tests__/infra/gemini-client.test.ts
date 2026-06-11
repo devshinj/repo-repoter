@@ -1,6 +1,6 @@
 // src/__tests__/infra/gemini-client.test.ts
 import { describe, it, expect } from "vitest";
-import { buildAnalysisPrompt, parseAnalysisResponse } from "@/infra/gemini/gemini-client";
+import { buildAnalysisPrompt, parseAnalysisResponse, buildHrmsTaskPrompt } from "@/infra/gemini/gemini-client";
 import type { CommitRecord } from "@/core/types";
 
 const sampleCommits: CommitRecord[] = [
@@ -67,5 +67,37 @@ describe("parseAnalysisResponse", () => {
     const tasks = parseAnalysisResponse(response, "my-app", "2026-04-09", ["abc123"]);
     expect(tasks).toHaveLength(1);
     expect(tasks[0].title).toBe("테스트");
+  });
+});
+
+describe("buildHrmsTaskPrompt", () => {
+  it("builds prompt with multiple repos and estimated time", () => {
+    const prompt = buildHrmsTaskPrompt("CUVIA", "2026-06-10", [
+      {
+        repoName: "cuvia-frontend",
+        commits: [sampleCommits[0]],
+      },
+      {
+        repoName: "cuvia-backend",
+        commits: [sampleCommits[1]],
+      },
+    ], 120);
+
+    expect(prompt).toContain("CUVIA");
+    expect(prompt).toContain("2026-06-10");
+    expect(prompt).toContain("cuvia-frontend");
+    expect(prompt).toContain("cuvia-backend");
+    expect(prompt).toContain("120");
+    expect(prompt).toContain("추정 총 작업 시간");
+  });
+
+  it("handles single repo", () => {
+    const prompt = buildHrmsTaskPrompt("LogiCraft", "2026-06-10", [
+      { repoName: "logicraft", commits: sampleCommits },
+    ], 60);
+
+    expect(prompt).toContain("LogiCraft");
+    expect(prompt).toContain("logicraft");
+    expect(prompt).toContain("2건");
   });
 });
