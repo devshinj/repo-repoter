@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Info } from "lucide-react";
+import { toast } from "sonner";
 import { ApiKeyForm } from "@/components/hrms/api-key-form";
 import { MappingCard } from "@/components/hrms/mapping-card";
 import { MappingModal } from "@/components/hrms/mapping-modal";
@@ -15,6 +26,7 @@ export default function HrmsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [deleteKeyDialogOpen, setDeleteKeyDialogOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -46,22 +58,31 @@ export default function HrmsPage() {
       body: JSON.stringify({ mappingId, targetDate }),
     });
     const data = await res.json();
-    if (!res.ok) alert(data.error);
-    else alert(data.skipped ? "커밋 없음 — 등록 건너뜀" : `등록 완료 (HRMS #${data.hrmsTaskId})`);
+    if (!res.ok) {
+      toast.error(data.error);
+    } else if (data.skipped) {
+      toast.info("해당 날짜에 커밋이 없어 등록을 건너뛰었습니다.");
+    } else {
+      toast.success(`업무 등록 완료 (HRMS #${data.hrmsTaskId})`);
+    }
     loadData();
   }
 
   async function handleDelete(mappingId: number) {
     const res = await fetch(`/api/hrms/mappings/${mappingId}`, { method: "DELETE" });
-    if (res.ok) loadData();
+    if (res.ok) {
+      toast.success("매핑이 삭제되었습니다.");
+      loadData();
+    }
   }
 
   async function handleDeleteKey() {
-    if (!confirm("API Key를 삭제하시겠습니까? 모든 매핑의 자동 등록이 중단됩니다.")) return;
     await fetch("/api/hrms/key", { method: "DELETE" });
     setKeyInfo(null);
     setMappings([]);
     setLogs([]);
+    setDeleteKeyDialogOpen(false);
+    toast.success("API Key가 삭제되었습니다.");
     loadData();
   }
 
@@ -88,7 +109,7 @@ export default function HrmsPage() {
           {" "}({keyInfo.maskedKey})
         </span>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={handleDeleteKey}>Key 삭제</Button>
+          <Button size="sm" variant="outline" onClick={() => setDeleteKeyDialogOpen(true)}>Key 삭제</Button>
         </div>
       </div>
 
@@ -129,6 +150,21 @@ export default function HrmsPage() {
         onSave={loadData}
         editing={editing}
       />
+
+      <AlertDialog open={deleteKeyDialogOpen} onOpenChange={setDeleteKeyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>API Key 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              API Key를 삭제하시겠습니까? 모든 매핑의 자동 등록이 중단됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteKey}>삭제</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
