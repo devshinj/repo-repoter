@@ -25,6 +25,9 @@ function makeCommit(overrides: Partial<CacheCommit> = {}): CacheCommit {
     message: "test commit",
     committedDate: "2026-04-10",
     committedAt: "2026-04-10T09:00:00+09:00",
+    additions: 0,
+    deletions: 0,
+    filesChanged: [],
     ...overrides,
   };
 }
@@ -151,5 +154,25 @@ describe("commit_cache CRUD", () => {
     expect(getCommitCountsByDateRange(db, [], "2026-04-01", "2026-04-30")).toEqual({});
     expect(getCommitsByDateRange(db, [], "2026-04-01", "2026-04-30")).toEqual([]);
     expect(getCommitsByDate(db, [], "2026-04-10")).toEqual([]);
+  });
+
+  it("additions/deletions/filesChanged가 저장 및 조회된다", () => {
+    const commit = makeCommit({
+      additions: 50,
+      deletions: 10,
+      filesChanged: ["src/foo.ts", "src/bar.ts"],
+    });
+    insertCommitCache(db, [commit]);
+    const commits = getCommitsByDate(db, [1], "2026-04-10");
+    expect(commits[0].additions).toBe(50);
+    expect(commits[0].deletions).toBe(10);
+    expect(commits[0].filesChanged).toEqual(["src/foo.ts", "src/bar.ts"]);
+  });
+
+  it("filesChanged가 빈 배열이면 null로 저장되고 빈 배열로 반환된다", () => {
+    const commit = makeCommit({ filesChanged: [] });
+    insertCommitCache(db, [commit]);
+    const commits = getCommitsByDate(db, [1], "2026-04-10");
+    expect(commits[0].filesChanged).toEqual([]);
   });
 });

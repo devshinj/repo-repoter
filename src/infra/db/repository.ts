@@ -113,7 +113,7 @@ export function updateAutoReportEnabled(
 
 export function getAutoReportEnabledRepos(db: Database.Database) {
   return db.prepare(
-    "SELECT * FROM repositories WHERE auto_report_enabled = 1 AND clone_path IS NOT NULL"
+    "SELECT * FROM repositories WHERE auto_report_enabled = 1 AND sync_status = 'ready'"
   ).all() as any[];
 }
 
@@ -212,9 +212,9 @@ export function updateGitAuthor(db: Database.Database, id: number, userId: strin
   return result.changes > 0;
 }
 
-export function updateCloneStatus(db: Database.Database, id: number, status: string): void {
+export function updateSyncStatus(db: Database.Database, id: number, status: string): void {
   db.prepare(
-    "UPDATE repositories SET clone_status = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE repositories SET sync_status = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(status, id);
 }
 
@@ -248,17 +248,25 @@ export interface CacheCommit {
   message: string;
   committedDate: string;   // YYYY-MM-DD
   committedAt: string;     // ISO 8601
+  additions: number;
+  deletions: number;
+  filesChanged: string[];  // array in code, JSON string in DB
 }
 
 export function insertCommitCache(db: Database.Database, commits: CacheCommit[]): number {
   const stmt = db.prepare(
-    `INSERT OR IGNORE INTO commit_cache (sha, repository_id, branch, author, message, committed_date, committed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR IGNORE INTO commit_cache (sha, repository_id, branch, author, message, committed_date, committed_at, additions, deletions, files_changed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertMany = db.transaction((rows: CacheCommit[]) => {
     let inserted = 0;
     for (const c of rows) {
-      const result = stmt.run(c.sha, c.repositoryId, c.branch, c.author, c.message, c.committedDate, c.committedAt);
+      const result = stmt.run(
+        c.sha, c.repositoryId, c.branch, c.author, c.message,
+        c.committedDate, c.committedAt,
+        c.additions, c.deletions,
+        c.filesChanged.length > 0 ? JSON.stringify(c.filesChanged) : null
+      );
       inserted += result.changes;
     }
     return inserted;
@@ -328,7 +336,7 @@ export function getCommitsByDateRange(
   if (repoIds.length === 0) return [];
 
   const placeholders = repoIds.map(() => "?").join(",");
-  let sql = `SELECT sha, repository_id, branch, author, message, committed_date, committed_at
+  let sql = `SELECT sha, repository_id, branch, author, message, committed_date, committed_at, additions, deletions, files_changed
     FROM commit_cache
     WHERE repository_id IN (${placeholders}) AND committed_date BETWEEN ? AND ?`;
   const params: (string | number)[] = [...repoIds, since, until];
@@ -350,6 +358,9 @@ export function getCommitsByDateRange(
     message: r.message,
     committedDate: r.committed_date,
     committedAt: r.committed_at,
+    additions: r.additions ?? 0,
+    deletions: r.deletions ?? 0,
+    filesChanged: r.files_changed ? JSON.parse(r.files_changed) : [],
   }));
 }
 
