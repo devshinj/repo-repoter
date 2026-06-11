@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { mappingId, targetDate } = body;
+  const { mappingId, targetDate, force } = body;
 
   if (!mappingId) {
     return NextResponse.json({ error: "mappingId is required" }, { status: 400 });
@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
 
   const date = targetDate ?? getYesterdayDate();
 
-  if (hasSuccessLog(db, mappingId, date)) {
-    return NextResponse.json({ error: `Already registered for ${date}` }, { status: 409 });
+  if (hasSuccessLog(db, mappingId, date) && !force) {
+    return NextResponse.json({ duplicate: true, date }, { status: 200 });
   }
 
   const repoIds = mapping.repos.map((r: any) => r.id);

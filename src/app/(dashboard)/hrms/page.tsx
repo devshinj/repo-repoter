@@ -27,6 +27,7 @@ export default function HrmsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [deleteKeyDialogOpen, setDeleteKeyDialogOpen] = useState(false);
+  const [duplicateDialog, setDuplicateDialog] = useState<{ mappingId: number; targetDate: string } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -51,15 +52,17 @@ export default function HrmsPage() {
     loadData();
   }, [loadData]);
 
-  async function handleRegister(mappingId: number, targetDate?: string) {
+  async function handleRegister(mappingId: number, targetDate?: string, force?: boolean) {
     const res = await fetch("/api/hrms/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mappingId, targetDate }),
+      body: JSON.stringify({ mappingId, targetDate, force }),
     });
     const data = await res.json();
     if (!res.ok) {
       toast.error(data.error);
+    } else if (data.duplicate) {
+      setDuplicateDialog({ mappingId, targetDate: data.date });
     } else if (data.skipped) {
       toast.info("해당 날짜에 커밋이 없어 등록을 건너뛰었습니다.");
     } else {
@@ -162,6 +165,26 @@ export default function HrmsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>취소</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteKey}>삭제</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!duplicateDialog} onOpenChange={(open) => !open && setDuplicateDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>중복 등록 확인</AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicateDialog?.targetDate}에 이미 업무가 등록되어 있습니다. 다시 등록하면 HRMS에 동일 날짜의 업무가 중복 생성됩니다. 그래도 등록하시겠습니까?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (duplicateDialog) {
+                handleRegister(duplicateDialog.mappingId, duplicateDialog.targetDate, true);
+              }
+              setDuplicateDialog(null);
+            }}>등록</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
