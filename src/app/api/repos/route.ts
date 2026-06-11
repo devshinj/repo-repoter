@@ -1,27 +1,109 @@
 // src/app/api/repos/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, rm } from "fs/promises";
 import {
   insertRepositoryForUser,
-  getRepositoriesByUser,
   getRepositoriesWithLastCommit,
   deleteRepositoryForUser,
   getRepositoryByIdAndUser,
   updateGitAuthor,
   updateLabel,
-  updateCloneStatus,
+  updateSyncStatus,
   updatePrimaryLanguage,
   updateAutoReportEnabled,
   insertCommitCache,
   type CacheCommit,
 } from "@/infra/db/repository";
-import { fetchRepoLanguage } from "@/infra/github/github-client";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { parseGitUrl } from "@/infra/git/parse-git-url";
-import { cloneRepository, getBranches, getCommitsForCache } from "@/infra/git/git-client";
+import { createGitProvider } from "@/infra/git-provider";
+import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
+
+const detailConcurrency = 5;
+
+async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: number): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(fn));
+    for (const r of settled) {
+      if (r.status === "fulfilled") results.push(r.value);
+    }
+  }
+  return results;
+}
+
+async function initialSync(
+  db: ReturnType<typeof getDb>,
+  repoId: number,
+  owner: string,
+  repo: string,
+  branch: string,
+  meta: GitProviderMeta,
+  token: string
+): Promise<void> {
+  updateSyncStatus(db, repoId, "syncing");
+  try {
+    const provider = createGitProvider(meta, token);
+
+    try {
+      const language = await provider.getRepoLanguage(owner, repo);
+      updatePrimaryLanguage(db, repoId, language);
+    } catch { /* non-critical */ }
+
+    const branches = await provider.listBranches(owner, repo);
+    const branchNames = branches.map(b => b.name);
+    const targetBranches = branchNames.length > 0 ? branchNames : [branch];
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const sinceDate = sixMonthsAgo.toISOString();
+
+    const seenShas = new Set<string>();
+    const allCommits: CacheCommit[] = [];
+
+    for (const br of targetBranches) {
+      let page = 1;
+      while (true) {
+        const commits = await provider.listCommits(owner, repo, {
+          branch: br, since: sinceDate, perPage: 100, page,
+        });
+        if (commits.length === 0) break;
+
+        const detailed = await pMap(
+          commits.filter(c => !seenShas.has(c.sha)),
+          (c) => provider.getCommitDetail(owner, repo, c.sha),
+          detailConcurrency
+        );
+
+        for (const c of detailed) {
+          if (seenShas.has(c.sha)) continue;
+          seenShas.add(c.sha);
+          allCommits.push({
+            sha: c.sha, repositoryId: repoId, branch: br,
+            author: c.author, message: c.message,
+            committedDate: c.date.slice(0, 10), committedAt: c.date,
+            additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
+          });
+        }
+        if (commits.length < 100) break;
+        page++;
+      }
+    }
+
+    if (allCommits.length > 0) {
+      const inserted = insertCommitCache(db, allCommits);
+      console.log(`[Repos] ${owner}/${repo}: cached ${inserted} commits via API`);
+    }
+
+    updateSyncStatus(db, repoId, "ready");
+  } catch (err) {
+    console.error(`[Repos] ${owner}/${repo}: initial sync failed -`, err);
+    updateSyncStatus(db, repoId, "error");
+  }
+}
 
 async function registerSingleRepo(
   db: ReturnType<typeof getDb>,
@@ -29,7 +111,8 @@ async function registerSingleRepo(
   token: string,
   cloneUrl: string,
   branch: string,
-  credentialId?: number
+  credentialId: number,
+  meta: GitProviderMeta
 ): Promise<{ success: boolean; error?: string; cloneUrl: string }> {
   let parsed;
   try {
@@ -39,71 +122,16 @@ async function registerSingleRepo(
   }
 
   try {
-    const { join } = await import("path");
-    const clonePath = join(process.cwd(), "data", "repos", userId, parsed.owner, `${parsed.repo}.git`);
-
     const repoRow = db.transaction(() => {
       insertRepositoryForUser(db, {
-        userId,
-        owner: parsed.owner,
-        repo: parsed.repo,
-        branch,
-        cloneUrl,
-        credentialId,
+        userId, owner: parsed.owner, repo: parsed.repo, branch, cloneUrl, credentialId,
       });
-
-      const row = db.prepare(
+      return db.prepare(
         "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
       ).get(userId, cloneUrl) as any;
-
-      updateCloneStatus(db, row.id, "cloning");
-      return row;
     })();
 
-    // clone은 백그라운드로 실행
-    (async () => {
-      try {
-        await mkdir(join(process.cwd(), "data", "repos", userId, parsed!.owner), { recursive: true });
-        await cloneRepository(cloneUrl, clonePath, token);
-        db.prepare("UPDATE repositories SET clone_path = ? WHERE id = ?").run(clonePath, repoRow.id);
-        console.log(`[Repos] Cloned ${cloneUrl} to ${clonePath}`);
-
-        try {
-          const language = await fetchRepoLanguage(parsed!.owner, parsed!.repo, token);
-          updatePrimaryLanguage(db, repoRow.id, language);
-        } catch (langErr) {
-          console.error(`[Repos] Language fetch failed for ${cloneUrl}:`, langErr);
-        }
-
-        updateCloneStatus(db, repoRow.id, "caching");
-
-        try {
-          const branches = await getBranches(clonePath);
-          const cacheCommits = await getCommitsForCache(clonePath, branches);
-          if (cacheCommits.length > 0) {
-            const rows: CacheCommit[] = cacheCommits.map(c => ({
-              sha: c.sha,
-              repositoryId: repoRow.id,
-              branch: c.branch,
-              author: c.author,
-              message: c.message,
-              committedDate: c.committedDate,
-              committedAt: c.committedAt,
-            }));
-            const inserted = insertCommitCache(db, rows);
-            console.log(`[Repos] Cached ${inserted} commits for ${parsed!.owner}/${parsed!.repo}`);
-          }
-        } catch (cacheErr) {
-          console.error(`[Repos] Cache build failed for ${cloneUrl}:`, cacheErr);
-        }
-
-        updateCloneStatus(db, repoRow.id, "ready");
-      } catch (err) {
-        console.error(`[Repos] Failed to clone ${cloneUrl}:`, err);
-        updateCloneStatus(db, repoRow.id, "error");
-      }
-    })();
-
+    initialSync(db, repoRow.id, parsed.owner, parsed.repo, branch, meta, token).catch(console.error);
     return { success: true, cloneUrl };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -129,7 +157,6 @@ export async function POST(request: NextRequest) {
   const userId = session.user.id;
   const db = getDb();
 
-  // credentialId가 명시되면 해당 credential 사용, 없으면 기존 방식 (첫 번째 git credential)
   const credentialId = body.credentialId ? Number(body.credentialId) : undefined;
 
   let gitCred: any;
@@ -146,12 +173,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Git PAT이 등록되지 않았습니다. 설정에서 먼저 등록하세요." }, { status: 400 });
   }
   const token = decrypt(gitCred.credential);
+  const meta: GitProviderMeta = gitCred.metadata ? JSON.parse(gitCred.metadata) : { type: "github", host: "github.com", apiBase: "https://api.github.com" };
 
-  // 일괄 등록
   if (Array.isArray(body.repositories)) {
     const results = [];
     for (const item of body.repositories) {
-      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main", credentialId ?? gitCred.id);
+      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main", credentialId ?? gitCred.id, meta);
       results.push(result);
     }
     const succeeded = results.filter(r => r.success).length;
@@ -162,17 +189,16 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   }
 
-  // 단건 등록 (기존 호환)
   const { cloneUrl, branch = "main" } = body;
   if (!cloneUrl) {
     return NextResponse.json({ error: "cloneUrl is required" }, { status: 400 });
   }
 
-  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch, credentialId ?? gitCred.id);
+  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch, credentialId ?? gitCred.id, meta);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
-  return NextResponse.json({ message: "Repository registered. Cloning in progress." }, { status: 201 });
+  return NextResponse.json({ message: "Repository registered. Syncing in progress." }, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -237,11 +263,6 @@ export async function DELETE(request: NextRequest) {
   const deleted = deleteRepositoryForUser(db, Number(id), userId);
   if (!deleted) {
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
-  }
-
-  // clone 디렉토리 정리
-  if (repo.clone_path) {
-    rm(repo.clone_path, { recursive: true, force: true }).catch(console.error);
   }
 
   return NextResponse.json({ message: "Deleted" });
