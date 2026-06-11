@@ -121,7 +121,7 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>HRMS 프로젝트</Label>
-              <Select value={selectedProjectId} onValueChange={setSelectedProjectId} disabled={!!editing}>
+              <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!!editing}>
                 <SelectTrigger><SelectValue placeholder="프로젝트 선택" /></SelectTrigger>
                 <SelectContent>
                   {projects.map((p: any) => (
