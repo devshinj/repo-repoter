@@ -1,6 +1,6 @@
 // src/scheduler/report-generator.ts
 import { GoogleGenAI } from "@google/genai";
-import { getDetailedCommitsForDate, getBranches } from "@/infra/git/git-client";
+import { getDb } from "@/infra/db/connection";
 
 export interface CommitEntry {
   branch: string;
@@ -14,40 +14,45 @@ export interface CommitEntry {
   commitDate?: string;
 }
 
-export async function collectCommitsForDate(
-  clonePath: string,
-  cloneUrl: string,
+export function collectCommitsForDateFromCache(
+  repositoryId: number,
   date: string,
   authors?: string[]
-): Promise<CommitEntry[]> {
-  const branches = await getBranches(clonePath);
-  const seenShas = new Set<string>();
-  const commits: CommitEntry[] = [];
+): CommitEntry[] {
+  const db = getDb();
 
-  for (const branch of branches) {
-    try {
-      const branchCommits = await getDetailedCommitsForDate(clonePath, branch, cloneUrl, date, authors);
-      for (const c of branchCommits) {
-        if (seenShas.has(c.sha)) continue;
-        seenShas.add(c.sha);
-        commits.push({
-          branch,
-          sha: c.sha,
-          message: c.message,
-          author: c.author,
-          date: c.date,
-          filesChanged: c.filesChanged,
-          additions: c.additions,
-          deletions: c.deletions,
-          commitDate: date,
-        });
-      }
-    } catch {
-      // 브랜치 오류 무시
-    }
+  let sql = `SELECT sha, branch, author, message, committed_at, committed_date, additions, deletions, files_changed
+    FROM commit_cache WHERE repository_id = ? AND committed_date = ?`;
+  const params: (string | number)[] = [repositoryId, date];
+
+  if (authors && authors.length > 0) {
+    const authorClauses = authors.map(() => "author LIKE ?").join(" OR ");
+    sql += ` AND (${authorClauses})`;
+    params.push(...authors.map(a => `%${a}%`));
   }
 
-  return commits;
+  sql += " ORDER BY committed_at ASC";
+
+  const rows = db.prepare(sql).all(...params) as any[];
+  const seenShas = new Set<string>();
+
+  return rows
+    .filter(r => {
+      if (seenShas.has(r.sha)) return false;
+      seenShas.add(r.sha);
+      return true;
+    })
+    .map(r => ({
+      branch: r.branch,
+      sha: r.sha,
+      message: r.message,
+      author: r.author,
+      date: r.committed_at,
+      filesChanged: r.files_changed ? JSON.parse(r.files_changed) : [],
+      additions: r.additions ?? 0,
+      deletions: r.deletions ?? 0,
+      commitDate: r.committed_date,
+    }));
 }
 
 export function buildPrompt(
@@ -158,14 +163,14 @@ export function parseGeneratedReport(text: string, displayName: string): { title
 }
 
 export async function generateReportContent(
-  repo: { owner: string; repo: string; label: string | null; clone_path: string; clone_url: string; git_author: string | null },
+  repo: { id: number; owner: string; repo: string; label: string | null; git_author: string | null },
   date: string
 ): Promise<{ title: string; content: string; commitCount: number } | null> {
   const authors = repo.git_author
     ? repo.git_author.split(",").map((a) => a.trim()).filter(Boolean)
     : undefined;
 
-  const commits = await collectCommitsForDate(repo.clone_path, repo.clone_url, date, authors);
+  const commits = collectCommitsForDateFromCache(repo.id, date, authors);
 
   if (commits.length === 0) return null;
 

@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getDb } from "@/infra/db/connection";
 import {
   CommitEntry,
-  collectCommitsForDate,
+  collectCommitsForDateFromCache,
   buildPrompt,
   parseGeneratedReport,
 } from "@/scheduler/report-generator";
@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
   try {
     const repo = getRepositoryByIdAndUser(db, Number(repoId), session.user.id);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
-    if (!repo.clone_path) return NextResponse.json({ error: "Repository not yet cloned" }, { status: 400 });
 
     const isRange = Boolean(dateRange);
     const dateLabel = isRange ? `${dateRange!.since} ~ ${dateRange!.until}` : date!;
@@ -71,12 +70,12 @@ export async function POST(request: NextRequest) {
             const end = new Date(dateRange!.until);
             while (current <= end) {
               const d = current.toISOString().slice(0, 10);
-              const dayCommits = await collectCommitsForDate(repo.clone_path!, repo.clone_url, d, authors);
+              const dayCommits = collectCommitsForDateFromCache(repo.id, d, authors);
               allCommits = allCommits.concat(dayCommits);
               current.setDate(current.getDate() + 1);
             }
           } else {
-            allCommits = await collectCommitsForDate(repo.clone_path!, repo.clone_url, date!, authors);
+            allCommits = collectCommitsForDateFromCache(repo.id, date!, authors);
           }
 
           if (allCommits.length === 0) {
@@ -111,12 +110,12 @@ export async function POST(request: NextRequest) {
       const end = new Date(dateRange!.until);
       while (current <= end) {
         const d = current.toISOString().slice(0, 10);
-        const dayCommits = await collectCommitsForDate(repo.clone_path, repo.clone_url, d, syncAuthors);
+        const dayCommits = collectCommitsForDateFromCache(repo.id, d, syncAuthors);
         allCommits = allCommits.concat(dayCommits);
         current.setDate(current.getDate() + 1);
       }
     } else {
-      allCommits = await collectCommitsForDate(repo.clone_path, repo.clone_url, date!, syncAuthors);
+      allCommits = collectCommitsForDateFromCache(repo.id, date!, syncAuthors);
     }
 
     if (allCommits.length === 0) {
