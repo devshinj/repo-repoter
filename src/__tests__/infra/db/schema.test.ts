@@ -40,12 +40,22 @@ describe("createTables", () => {
     expect(rows).toHaveLength(2);
   });
 
-  it("should have user_id, clone_url, clone_path columns in repositories", () => {
+  it("should have user_id, clone_url, sync_status columns in repositories", () => {
     const info = db.prepare("PRAGMA table_info(repositories)").all() as any[];
     const columnNames = info.map((col: any) => col.name);
     expect(columnNames).toContain("user_id");
     expect(columnNames).toContain("clone_url");
-    expect(columnNames).toContain("clone_path");
+    expect(columnNames).toContain("sync_status");
+    expect(columnNames).not.toContain("clone_path");
+    expect(columnNames).not.toContain("clone_status");
+  });
+
+  it("should have additions, deletions, files_changed columns in commit_cache", () => {
+    const info = db.prepare("PRAGMA table_info(commit_cache)").all() as any[];
+    const columnNames = info.map((col: any) => col.name);
+    expect(columnNames).toContain("additions");
+    expect(columnNames).toContain("deletions");
+    expect(columnNames).toContain("files_changed");
   });
 
   it("should enforce unique(user_id, clone_url) on repositories", () => {

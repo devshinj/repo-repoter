@@ -13,7 +13,7 @@ export function createTables(db: Database.Database): void {
       polling_interval_min INTEGER NOT NULL DEFAULT 15,
       user_id TEXT NOT NULL DEFAULT '',
       clone_url TEXT NOT NULL DEFAULT '',
-      clone_path TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending',
       git_author TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -73,6 +73,9 @@ export function createTables(db: Database.Database): void {
       message TEXT NOT NULL,
       committed_date TEXT NOT NULL,
       committed_at TEXT NOT NULL,
+      additions INTEGER NOT NULL DEFAULT 0,
+      deletions INTEGER NOT NULL DEFAULT 0,
+      files_changed TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (repository_id, sha)
     );
@@ -182,9 +185,6 @@ export function migrateSchema(db: Database.Database): void {
   if (!repoColumnNames.includes("clone_url")) {
     db.exec("ALTER TABLE repositories ADD COLUMN clone_url TEXT NOT NULL DEFAULT ''");
   }
-  if (!repoColumnNames.includes("clone_path")) {
-    db.exec("ALTER TABLE repositories ADD COLUMN clone_path TEXT");
-  }
   if (!repoColumnNames.includes("git_author")) {
     db.exec("ALTER TABLE repositories ADD COLUMN git_author TEXT");
   }
@@ -264,13 +264,6 @@ export function migrateSchema(db: Database.Database): void {
 
   if (!repoColumnNames.includes("auto_report_enabled")) {
     db.exec("ALTER TABLE repositories ADD COLUMN auto_report_enabled INTEGER NOT NULL DEFAULT 0");
-  }
-
-  if (!repoColumnNames.includes("clone_status")) {
-    db.exec("ALTER TABLE repositories ADD COLUMN clone_status TEXT NOT NULL DEFAULT 'ready'");
-    // 기존 저장소: clone_path 유무로 상태 보정
-    db.exec("UPDATE repositories SET clone_status = 'ready' WHERE clone_path IS NOT NULL");
-    db.exec("UPDATE repositories SET clone_status = 'pending' WHERE clone_path IS NULL");
   }
 
   // commit_cache PK를 sha → (repository_id, sha) 복합키로 마이그레이션
