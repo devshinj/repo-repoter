@@ -136,8 +136,8 @@ export function createTables(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date
-      ON hrms_task_logs(mapping_id, target_date);
+    CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status
+      ON hrms_task_logs(mapping_id, target_date, status);
 
     CREATE INDEX IF NOT EXISTS idx_hrms_project_mappings_user
       ON hrms_project_mappings(user_id);
@@ -322,5 +322,14 @@ export function migrateSchema(db: Database.Database): void {
   const hrmsKeyColumnNames = hrmsKeyColumns.map((c: any) => c.name);
   if (hrmsKeyColumns.length > 0 && !hrmsKeyColumnNames.includes("hrms_user_id")) {
     db.exec("ALTER TABLE hrms_api_keys ADD COLUMN hrms_user_id TEXT");
+  }
+
+  // hrms_task_logs: 인덱스에 status 포함으로 교체
+  const oldIdx = db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_hrms_task_logs_mapping_date'"
+  ).get();
+  if (oldIdx) {
+    db.exec("DROP INDEX idx_hrms_task_logs_mapping_date");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status ON hrms_task_logs(mapping_id, target_date, status)");
   }
 }

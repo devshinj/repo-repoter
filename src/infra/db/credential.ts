@@ -21,24 +21,24 @@ export function insertCredential(db: Database.Database, input: InsertCredentialI
 }
 
 export function getCredentialsByUser(db: Database.Database, userId: string) {
-  return db.prepare("SELECT * FROM user_credentials WHERE user_id = ?").all(userId) as any[];
+  return db.prepare("SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ?").all(userId) as any[];
 }
 
 export function getCredentialByUserAndProvider(db: Database.Database, userId: string, provider: string) {
   return db.prepare(
-    "SELECT * FROM user_credentials WHERE user_id = ? AND provider = ?"
+    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ? AND provider = ?"
   ).get(userId, provider) as any | undefined;
 }
 
 export function getCredentialsByUserAndProvider(db: Database.Database, userId: string, provider: string) {
   return db.prepare(
-    "SELECT * FROM user_credentials WHERE user_id = ? AND provider = ?"
+    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ? AND provider = ?"
   ).all(userId, provider) as any[];
 }
 
 export function getCredentialById(db: Database.Database, id: number) {
   return db.prepare(
-    "SELECT * FROM user_credentials WHERE id = ?"
+    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE id = ?"
   ).get(id) as any | undefined;
 }
 

@@ -42,20 +42,23 @@ async function registerSingleRepo(
     const { join } = await import("path");
     const clonePath = join(process.cwd(), "data", "repos", userId, parsed.owner, `${parsed.repo}.git`);
 
-    insertRepositoryForUser(db, {
-      userId,
-      owner: parsed.owner,
-      repo: parsed.repo,
-      branch,
-      cloneUrl,
-      credentialId,
-    });
+    const repoRow = db.transaction(() => {
+      insertRepositoryForUser(db, {
+        userId,
+        owner: parsed.owner,
+        repo: parsed.repo,
+        branch,
+        cloneUrl,
+        credentialId,
+      });
 
-    const repoRow = db.prepare(
-      "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
-    ).get(userId, cloneUrl) as any;
+      const row = db.prepare(
+        "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
+      ).get(userId, cloneUrl) as any;
 
-    updateCloneStatus(db, repoRow.id, "cloning");
+      updateCloneStatus(db, row.id, "cloning");
+      return row;
+    })();
 
     // clone은 백그라운드로 실행
     (async () => {

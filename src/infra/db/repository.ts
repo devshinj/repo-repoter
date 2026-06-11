@@ -273,6 +273,21 @@ export function getLatestCacheDate(db: Database.Database, repositoryId: number):
   return row?.latest ?? null;
 }
 
+export function getLatestCacheDateBatch(db: Database.Database, repoIds: number[]): Map<number, string | null> {
+  const result = new Map<number, string | null>();
+  if (repoIds.length === 0) return result;
+
+  const placeholders = repoIds.map(() => "?").join(",");
+  const rows = db.prepare(
+    `SELECT repository_id, MAX(committed_date) as latest FROM commit_cache
+     WHERE repository_id IN (${placeholders}) GROUP BY repository_id`
+  ).all(...repoIds) as { repository_id: number; latest: string | null }[];
+
+  for (const id of repoIds) result.set(id, null);
+  for (const row of rows) result.set(row.repository_id, row.latest);
+  return result;
+}
+
 export function getCommitCountsByDateRange(
   db: Database.Database,
   repoIds: number[],
@@ -445,22 +460,13 @@ export function getDashboardStats(db: Database.Database, userId: string): Dashbo
       allAuthors.push(...authors);
     }
   }
-  const authorsParam = allAuthors.length > 0 ? allAuthors : undefined;
-
-  const todayCounts = repoIds.length > 0
-    ? getCommitCountsByDateRange(db, repoIds, today, today, authorsParam)
-    : {};
-  const todayCommits = Object.values(todayCounts).reduce((sum, n) => sum + n, 0);
-
-  const weekCounts = repoIds.length > 0
-    ? getCommitCountsByDateRange(db, repoIds, weekStart, today, authorsParam)
-    : {};
-  const weekCommits = Object.values(weekCounts).reduce((sum, n) => sum + n, 0);
 
   const reportRow = db.prepare(
     "SELECT COUNT(*) as cnt FROM reports WHERE user_id = ?"
   ).get(userId) as { cnt: number };
 
+  let todayCommits = 0;
+  let weekCommits = 0;
   let totalCommits = 0;
   let maxDailyCommits = 0;
 
@@ -469,16 +475,24 @@ export function getDashboardStats(db: Database.Database, userId: string): Dashbo
     const params: (string | number)[] = [...repoIds];
 
     let authorClause = "";
-    if (authorsParam && authorsParam.length > 0) {
-      authorClause = " AND (" + authorsParam.map(() => "author LIKE ?").join(" OR ") + ")";
-      params.push(...authorsParam.map((a) => `%${a}%`));
+    if (allAuthors.length > 0) {
+      authorClause = " AND (" + allAuthors.map(() => "author LIKE ?").join(" OR ") + ")";
+      params.push(...allAuthors.map((a) => `%${a}%`));
     }
 
-    const totalRow = db.prepare(
-      `SELECT COUNT(*) as cnt FROM commit_cache
+    // 단일 쿼리로 today/week/total/maxDaily 모두 집계
+    const statsRow = db.prepare(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN committed_date = ? THEN 1 ELSE 0 END) as today_cnt,
+         SUM(CASE WHEN committed_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as week_cnt
+       FROM commit_cache
        WHERE repository_id IN (${placeholders})${authorClause}`
-    ).get(...params) as { cnt: number };
-    totalCommits = totalRow.cnt;
+    ).get(today, weekStart, today, ...params) as { total: number; today_cnt: number; week_cnt: number };
+
+    totalCommits = statsRow.total;
+    todayCommits = statsRow.today_cnt;
+    weekCommits = statsRow.week_cnt;
 
     const maxRow = db.prepare(
       `SELECT MAX(daily_count) as max_count FROM (

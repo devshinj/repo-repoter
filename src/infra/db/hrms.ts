@@ -25,7 +25,7 @@ export function upsertHrmsApiKey(db: Database.Database, input: UpsertHrmsApiKeyI
 
 export function getHrmsApiKey(db: Database.Database, userId: string) {
   return (db.prepare(
-    "SELECT * FROM hrms_api_keys WHERE user_id = ?"
+    "SELECT id, user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes, created_at, updated_at FROM hrms_api_keys WHERE user_id = ?"
   ).get(userId) ?? null) as any | null;
 }
 
@@ -64,23 +64,38 @@ export function insertMapping(db: Database.Database, input: InsertMappingInput):
 
 export function getMappingsByUser(db: Database.Database, userId: string) {
   const mappings = db.prepare(
-    "SELECT * FROM hrms_project_mappings WHERE user_id = ? ORDER BY created_at DESC"
+    "SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at FROM hrms_project_mappings WHERE user_id = ? ORDER BY created_at DESC"
   ).all(userId) as any[];
 
-  return mappings.map((m: any) => {
-    const repos = db.prepare(
-      `SELECT r.id, r.owner, r.repo, r.label
-       FROM hrms_mapping_repos mr
-       JOIN repositories r ON r.id = mr.repository_id
-       WHERE mr.mapping_id = ?`
-    ).all(m.id) as any[];
-    return { ...m, repos };
-  });
+  if (mappings.length === 0) return [];
+
+  // 1회 쿼리로 모든 매핑의 repos를 한번에 조회
+  const mappingIds = mappings.map((m: any) => m.id);
+  const placeholders = mappingIds.map(() => "?").join(",");
+  const allRepos = db.prepare(
+    `SELECT mr.mapping_id, r.id, r.owner, r.repo, r.label
+     FROM hrms_mapping_repos mr
+     JOIN repositories r ON r.id = mr.repository_id
+     WHERE mr.mapping_id IN (${placeholders})`
+  ).all(...mappingIds) as any[];
+
+  // mapping_id별로 그룹핑
+  const reposByMapping = new Map<number, any[]>();
+  for (const r of allRepos) {
+    const list = reposByMapping.get(r.mapping_id) ?? [];
+    list.push({ id: r.id, owner: r.owner, repo: r.repo, label: r.label });
+    reposByMapping.set(r.mapping_id, list);
+  }
+
+  return mappings.map((m: any) => ({
+    ...m,
+    repos: reposByMapping.get(m.id) ?? [],
+  }));
 }
 
 export function getMappingById(db: Database.Database, id: number) {
   const mapping = db.prepare(
-    "SELECT * FROM hrms_project_mappings WHERE id = ?"
+    "SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at FROM hrms_project_mappings WHERE id = ?"
   ).get(id) as any | null;
 
   if (!mapping) return null;
