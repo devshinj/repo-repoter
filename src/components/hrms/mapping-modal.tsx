@@ -110,7 +110,7 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl w-[90vw]">
         <DialogHeader>
           <DialogTitle>{editing ? "프로젝트 매핑 수정" : "프로젝트 매핑 추가"}</DialogTitle>
         </DialogHeader>
@@ -122,10 +122,10 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
             <div className="space-y-2">
               <Label>HRMS 프로젝트</Label>
               <Select value={selectedProjectId} onValueChange={(v) => setSelectedProjectId(v ?? "")} disabled={!!editing}>
-                <SelectTrigger><SelectValue placeholder="프로젝트 선택" /></SelectTrigger>
-                <SelectContent className="max-w-lg">
+                <SelectTrigger className="w-full"><SelectValue placeholder="프로젝트 선택" /></SelectTrigger>
+                <SelectContent className="w-[var(--anchor-width)] min-w-80" alignItemWithTrigger={false}>
                   {projects.map((p: any) => (
-                    <SelectItem key={p.id} value={String(p.id)} className="whitespace-normal">{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
