@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseGitUrl, buildAuthEnv } from "@/infra/git/parse-git-url";
+import { parseGitUrl } from "@/infra/git/parse-git-url";
 
 describe("parseGitUrl", () => {
   it("should parse GitHub HTTPS URL", () => {
@@ -38,17 +38,5 @@ describe("parseGitUrl", () => {
 
   it("should throw on SSH URL", () => {
     expect(() => parseGitUrl("git@github.com:owner/repo.git")).toThrow();
-  });
-});
-
-describe("buildAuthEnv", () => {
-  it("should return GIT_CONFIG env vars with Basic auth header", () => {
-    const env = buildAuthEnv("mytoken");
-    const encoded = Buffer.from("oauth2:mytoken").toString("base64");
-    expect(env).toEqual({
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: "http.extraHeader",
-      GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
-    });
   });
 });
