@@ -144,27 +144,30 @@ export function buildHrmsTaskPrompt(
   estimatedMinutes: number,
 ): string {
   const repoSections = repoCommits.map(({ repoName, commits }) => {
-    const totalAdd = commits.reduce((s, c) => s + c.additions, 0);
-    const totalDel = commits.reduce((s, c) => s + c.deletions, 0);
     const commitLines = commits
-      .map((c) => `- [${c.sha.slice(0, 7)}] ${c.message} (+${c.additions}/-${c.deletions})`)
+      .map((c) => `- ${c.message}`)
       .join("\n");
-    return `## ${repoName} (${commits.length}건, +${totalAdd}/-${totalDel})\n${commitLines}`;
+    return `## ${repoName} (${commits.length}건)\n${commitLines}`;
   }).join("\n\n");
 
-  return `HRMS 프로젝트 "${projectName}"에서 ${date}에 수행된 작업을 업무 보고 형식으로 정리해주세요.
+  return `아래 Git 커밋 메시지를 기반으로 ${date} 업무 내용을 작성해주세요.
 
-[저장소별 커밋 목록]
+[커밋 목록]
 ${repoSections}
 
 추정 총 작업 시간: 약 ${estimatedMinutes}분
 
-규칙:
-- 관련 커밋을 논리적 작업 단위로 묶어 정리
-- 각 작업 항목은 "- " 로 시작
-- 마지막에 "추정 작업 시간: 약 N시간 M분" 을 기재 (${estimatedMinutes}분 기준)
-- 한국어로 작성, 저장소명 언급 불필요 — 프로젝트 전체 관점에서 서술
-- 텍스트만 응답 (JSON/마크다운 코드블록 불필요)`;
+작성 규칙:
+- 커밋 메시지에 나온 구체적인 작업 내용을 그대로 반영 (추상화·의역 금지)
+- "feat:", "fix:", "refactor:" 등 prefix는 제거하고 내용만 기재
+- 관련된 커밋은 하나의 항목으로 묶되, 서로 다른 작업은 별도 항목으로 분리
+- 각 항목은 "- " 로 시작하는 개조식
+- 마지막 줄에 "추정 작업 시간: 약 N시간 M분" 기재 (${estimatedMinutes}분 기준)
+- 한국어, 텍스트만 응답 (JSON/마크다운 코드블록 불필요)
+- 저장소명 언급 불필요
+
+나쁜 예 (추상적): "프롬프트 엔지니어링 및 관련 로직 수정"
+좋은 예 (구체적): "클립보드 복사 실패 시 안내 메시지 개선 및 보고서 기본 뷰를 preview로 변경"`;
 }
 
 export async function generateHrmsTaskDescription(

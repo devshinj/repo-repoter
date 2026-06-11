@@ -83,12 +83,12 @@ describe("buildHrmsTaskPrompt", () => {
       },
     ], 120);
 
-    expect(prompt).toContain("CUVIA");
     expect(prompt).toContain("2026-06-10");
     expect(prompt).toContain("cuvia-frontend");
     expect(prompt).toContain("cuvia-backend");
     expect(prompt).toContain("120");
-    expect(prompt).toContain("추정 총 작업 시간");
+    expect(prompt).toContain("추상화·의역 금지");
+    expect(prompt).toContain("feat: add user login page");
   });
 
   it("handles single repo", () => {
@@ -96,8 +96,9 @@ describe("buildHrmsTaskPrompt", () => {
       { repoName: "logicraft", commits: sampleCommits },
     ], 60);
 
-    expect(prompt).toContain("LogiCraft");
     expect(prompt).toContain("logicraft");
     expect(prompt).toContain("2건");
+    expect(prompt).toContain("feat: add user login page");
+    expect(prompt).toContain("fix: resolve auth redirect bug");
   });
 });
