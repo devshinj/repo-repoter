@@ -56,3 +56,6 @@ deploy/.env
 
 # Serena MCP tool cache
 .serena/
+
+# PM2 logs
+logs/

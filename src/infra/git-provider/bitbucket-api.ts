@@ -55,9 +55,9 @@ export class BitbucketProvider implements GitProviderClient {
     const branches: ApiBranch[] = [];
     let nextUrl: string | null = `${this.apiBase}/repositories/${owner}/${repo}/refs/branches?pagelen=100`;
     while (nextUrl) {
-      const res = await fetch(nextUrl, { headers: this.headers });
+      const res: Response = await fetch(nextUrl, { headers: this.headers });
       if (!res.ok) throw new Error(`Bitbucket API error: ${res.status}`);
-      const data = await res.json();
+      const data: any = await res.json();
       if (Array.isArray(data.values)) {
         branches.push(...data.values.map((b: any) => ({ name: b.name, isDefault: false })));
       }
