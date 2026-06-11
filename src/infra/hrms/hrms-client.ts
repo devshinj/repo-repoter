@@ -100,6 +100,7 @@ export interface CreateTaskParams {
   title: string;
   description: string;
   projectId: number;
+  assigneeId?: string;
   status?: string;
   priority?: string;
   dueDate?: string;
@@ -112,7 +113,7 @@ export interface CreatedTask {
 }
 
 export async function createTask(apiKey: string, params: CreateTaskParams): Promise<CreatedTask> {
-  const result = await callMcpTool(apiKey, "create_task", {
+  const args: Record<string, unknown> = {
     title: params.title,
     description: params.description,
     projectId: params.projectId,
@@ -120,7 +121,9 @@ export async function createTask(apiKey: string, params: CreateTaskParams): Prom
     priority: params.priority ?? "medium",
     dueDate: params.dueDate,
     timeSpentMinutes: params.timeSpentMinutes,
-  });
+  };
+  if (params.assigneeId) args.assigneeId = params.assigneeId;
+  const result = await callMcpTool(apiKey, "create_task", args);
   return result.data?.task ?? result.data;
 }
 

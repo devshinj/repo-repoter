@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     upsertHrmsApiKey(db, {
       userId: session.user.id,
       encryptedKey: encrypt(apiKey),
+      hrmsUserId: userInfo.id,
       hrmsUserName: userInfo.name,
       scopes: JSON.stringify(userInfo.permissions),
     });

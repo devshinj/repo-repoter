@@ -34,6 +34,7 @@ describe("hrms_api_keys", () => {
     upsertHrmsApiKey(db, {
       userId: "user1",
       encryptedKey: "enc_abc",
+      hrmsUserId: "cqXKh7GRlDh-VAD7iPaQI",
       hrmsUserName: "신재석",
       scopes: JSON.stringify({ resources: "all", permissions: ["read", "write", "create"] }),
     });
@@ -48,12 +49,14 @@ describe("hrms_api_keys", () => {
     upsertHrmsApiKey(db, {
       userId: "user1",
       encryptedKey: "enc_old",
+      hrmsUserId: "old-id",
       hrmsUserName: "old",
       scopes: "{}",
     });
     upsertHrmsApiKey(db, {
       userId: "user1",
       encryptedKey: "enc_new",
+      hrmsUserId: "new-id",
       hrmsUserName: "new",
       scopes: "{}",
     });
@@ -67,6 +70,7 @@ describe("hrms_api_keys", () => {
     upsertHrmsApiKey(db, {
       userId: "user1",
       encryptedKey: "enc_abc",
+      hrmsUserId: "test-id",
       hrmsUserName: "test",
       scopes: "{}",
     });

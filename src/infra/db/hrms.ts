@@ -5,20 +5,22 @@ import Database from "better-sqlite3";
 interface UpsertHrmsApiKeyInput {
   userId: string;
   encryptedKey: string;
+  hrmsUserId: string | null;
   hrmsUserName: string | null;
   scopes: string | null;
 }
 
 export function upsertHrmsApiKey(db: Database.Database, input: UpsertHrmsApiKeyInput): void {
   db.prepare(
-    `INSERT INTO hrms_api_keys (user_id, encrypted_key, hrms_user_name, scopes)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO hrms_api_keys (user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        encrypted_key = excluded.encrypted_key,
+       hrms_user_id = excluded.hrms_user_id,
        hrms_user_name = excluded.hrms_user_name,
        scopes = excluded.scopes,
        updated_at = datetime('now')`
-  ).run(input.userId, input.encryptedKey, input.hrmsUserName, input.scopes);
+  ).run(input.userId, input.encryptedKey, input.hrmsUserId, input.hrmsUserName, input.scopes);
 }
 
 export function getHrmsApiKey(db: Database.Database, userId: string) {

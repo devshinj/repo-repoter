@@ -99,6 +99,7 @@ export function createTables(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL UNIQUE,
       encrypted_key TEXT NOT NULL,
+      hrms_user_id TEXT,
       hrms_user_name TEXT,
       scopes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -314,5 +315,12 @@ export function migrateSchema(db: Database.Database): void {
         row.id
       );
     }
+  }
+
+  // hrms_api_keys: hrms_user_id 컬럼 추가
+  const hrmsKeyColumns = db.prepare("PRAGMA table_info(hrms_api_keys)").all() as any[];
+  const hrmsKeyColumnNames = hrmsKeyColumns.map((c: any) => c.name);
+  if (hrmsKeyColumns.length > 0 && !hrmsKeyColumnNames.includes("hrms_user_id")) {
+    db.exec("ALTER TABLE hrms_api_keys ADD COLUMN hrms_user_id TEXT");
   }
 }

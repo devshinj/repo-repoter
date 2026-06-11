@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
       title,
       description,
       projectId: mapping.hrms_project_id,
+      assigneeId: keyRow.hrms_user_id ?? undefined,
       status: "done",
       priority: "medium",
       dueDate: date,

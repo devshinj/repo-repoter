@@ -33,7 +33,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
     return;
   }
 
-  const keyRow = db.prepare("SELECT encrypted_key FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
+  const keyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
   if (!keyRow) {
     console.error(`[HrmsScheduler] mapping=${mappingId}: no API key for user`);
     return;
@@ -90,6 +90,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       title,
       description,
       projectId: mapping.hrms_project_id,
+      assigneeId: keyRow.hrms_user_id ?? undefined,
       status: "done",
       priority: "medium",
       dueDate: date,
