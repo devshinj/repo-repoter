@@ -94,6 +94,52 @@ export function createTables(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_user_credentials_user_provider
       ON user_credentials(user_id, provider);
+
+    CREATE TABLE IF NOT EXISTS hrms_api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL UNIQUE,
+      encrypted_key TEXT NOT NULL,
+      hrms_user_name TEXT,
+      scopes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS hrms_project_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      hrms_project_id INTEGER NOT NULL,
+      hrms_project_name TEXT NOT NULL,
+      auto_register INTEGER NOT NULL DEFAULT 0,
+      cron_time TEXT NOT NULL DEFAULT '0 9 * * 1-5',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, hrms_project_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS hrms_mapping_repos (
+      mapping_id INTEGER NOT NULL REFERENCES hrms_project_mappings(id) ON DELETE CASCADE,
+      repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      PRIMARY KEY (mapping_id, repository_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS hrms_task_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mapping_id INTEGER NOT NULL REFERENCES hrms_project_mappings(id) ON DELETE CASCADE,
+      hrms_task_id INTEGER,
+      target_date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date
+      ON hrms_task_logs(mapping_id, target_date);
+
+    CREATE INDEX IF NOT EXISTS idx_hrms_project_mappings_user
+      ON hrms_project_mappings(user_id);
   `);
 }
 
