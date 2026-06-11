@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { stringColor } from "@/lib/color-hash";
-import { LayoutDashboard, GitFork, CalendarDays, FileText, Settings, LogOut, ExternalLink } from "lucide-react";
+import { LayoutDashboard, GitFork, CalendarDays, FileText, Settings, LogOut, Briefcase } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/repos", label: "저장소 관리", icon: GitFork },
   { href: "/task-calendar", label: "태스크 캘린더", icon: CalendarDays },
   { href: "/reports", label: "업무 보고서", icon: FileText },
+  { href: "/hrms", label: "HRMS 업무 관리", icon: Briefcase },
   { href: "/settings", label: "설정", icon: Settings },
 ];
 
@@ -53,16 +54,7 @@ export function Sidebar({ user }: SidebarProps) {
             </Button>
           );
         })}
-        <Separator className="my-2" />
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-muted-foreground"
-          nativeButton={false}
-          render={<a href="https://hrms.cudo.co.kr:9700/tasks" target="_blank" rel="noopener noreferrer" />}
-        >
-          <ExternalLink className="h-4 w-4" />
-          HRMS 태스크
-        </Button>
+
       </nav>
       <Separator />
       <div className="p-3 space-y-2">
