@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -76,6 +76,7 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
   const [loadingTasks, setLoadingTasks] = useState(true);
 
   const theme = getStatusTheme(projectStatus ?? "");
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setLoadingTasks(true);
@@ -91,6 +92,12 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
       .finally(() => setLoadingTasks(false));
   }, [mapping.hrms_project_id]);
 
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
   async function handleRegister(targetDate?: string) {
     setRegistering(true);
     const repoCount = mapping.repos?.length ?? 1;
@@ -105,10 +112,14 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
 
     let stepIndex = 0;
     setProgressStep(steps[0]);
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       stepIndex++;
       if (stepIndex < steps.length) {
         setProgressStep(steps[stepIndex]);
+        if (stepIndex === steps.length - 1 && intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
       }
     }, 2000);
 
@@ -118,7 +129,10 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
     } catch {
       setProgressStep(null);
     } finally {
-      clearInterval(interval);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       setRegistering(false);
       setShowDatePicker(false);
     }
