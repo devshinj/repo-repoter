@@ -14,6 +14,7 @@ import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
+import { syncOneRepo } from "@/scheduler/polling-manager";
 
 function getYesterdayDate(): string {
   const d = new Date();
@@ -63,6 +64,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ duplicate: true, date }, { status: 200 });
     }
     // HRMS에서 삭제된 경우 → 신규 등록으로 진행
+  }
+
+  // 등록 전 자동 동기화: 매핑된 저장소를 순차 동기화
+  const syncResults: { repo: string; commitsProcessed: number }[] = [];
+  for (const repo of mapping.repos) {
+    const repoLabel = repo.label || `${repo.owner}/${repo.repo}`;
+    try {
+      const result = await syncOneRepo(db, session.user.id, repo);
+      if (result === null) {
+        return NextResponse.json(
+          { error: `동기화 실패: ${repoLabel}이(가) 이미 동기화 중입니다. 잠시 후 다시 시도해주세요.`, failedRepo: repoLabel },
+          { status: 409 },
+        );
+      }
+      syncResults.push({ repo: repoLabel, commitsProcessed: result.commitsProcessed });
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: `동기화 실패: ${repoLabel}`, failedRepo: repoLabel, detail: err.message },
+        { status: 500 },
+      );
+    }
   }
 
   const repoIds = mapping.repos.map((r: any) => r.id);
@@ -198,6 +220,7 @@ export async function POST(request: NextRequest) {
       title,
       estimatedMinutes,
       action,
+      syncResults,
     }, { status: 201 });
   } catch (err: any) {
     insertTaskLog(db, {
