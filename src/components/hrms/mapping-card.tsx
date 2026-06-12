@@ -67,6 +67,7 @@ function getStatusTheme(status: string) {
 
 export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, onEdit, onDelete }: MappingCardProps) {
   const [registering, setRegistering] = useState(false);
+  const [progressStep, setProgressStep] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState("");
@@ -92,9 +93,32 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
 
   async function handleRegister(targetDate?: string) {
     setRegistering(true);
+    const repoCount = mapping.repos?.length ?? 1;
+
+    // 시뮬레이션 프로그레스: 동기화 → 생성 → 등록
+    const steps: string[] = [];
+    for (let i = 1; i <= repoCount; i++) {
+      steps.push(`저장소 동기화 중... (${i}/${repoCount})`);
+    }
+    steps.push("업무 내용 생성 중...");
+    steps.push("HRMS 등록 중...");
+
+    let stepIndex = 0;
+    setProgressStep(steps[0]);
+    const interval = setInterval(() => {
+      stepIndex++;
+      if (stepIndex < steps.length) {
+        setProgressStep(steps[stepIndex]);
+      }
+    }, 2000);
+
     try {
       await onRegister(mapping.id, targetDate);
+      setProgressStep(null);
+    } catch {
+      setProgressStep(null);
     } finally {
+      clearInterval(interval);
       setRegistering(false);
       setShowDatePicker(false);
     }
@@ -186,6 +210,14 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
             </div>
           )}
         </div>
+
+        {/* 프로그레스 표시 */}
+        {registering && progressStep && (
+          <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+            <span>{progressStep}</span>
+          </div>
+        )}
 
         {/* 업무 등록 버튼 */}
         <div className="pt-3 border-t border-black/5 dark:border-white/5 space-y-2.5">
