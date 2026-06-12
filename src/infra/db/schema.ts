@@ -144,6 +144,46 @@ export function createTables(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_hrms_project_mappings_user
       ON hrms_project_mappings(user_id);
+
+    CREATE TABLE IF NOT EXISTS logicraft_api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL UNIQUE,
+      encrypted_key TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS hrms_logicraft_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      hrms_project_id INTEGER NOT NULL,
+      hrms_project_name TEXT NOT NULL,
+      logicraft_project_id TEXT NOT NULL,
+      logicraft_project_name TEXT NOT NULL,
+      auto_register INTEGER NOT NULL DEFAULT 0,
+      cron_time TEXT NOT NULL DEFAULT '0 9 * * 1-5',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, logicraft_project_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS hrms_logicraft_task_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mapping_id INTEGER NOT NULL REFERENCES hrms_logicraft_mappings(id) ON DELETE CASCADE,
+      hrms_task_id INTEGER,
+      target_date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_hrms_logicraft_task_logs_mapping_date_status
+      ON hrms_logicraft_task_logs(mapping_id, target_date, status);
+
+    CREATE INDEX IF NOT EXISTS idx_hrms_logicraft_mappings_user
+      ON hrms_logicraft_mappings(user_id);
   `);
 }
 

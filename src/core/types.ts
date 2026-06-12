@@ -118,3 +118,41 @@ export interface DashboardStats {
   totalCommits: number;
   maxDailyCommits: number;
 }
+
+/** LogiCraft 프로젝트 정보 */
+export interface LogicraftProject {
+  id: string; // UUID
+  name: string;
+  description: string | null;
+  visibility: string;
+}
+
+/** LogiCraft ITEM 요약 (list_items 응답) */
+export interface LogicraftItemSummary {
+  id: string;
+  type: string;
+  title: string;
+  status: string;
+  domain_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** LogiCraft 변경 제안 요약 */
+export interface LogicraftProposal {
+  id: string;
+  target_id: string;
+  status: string;
+  rationale: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+/** LogiCraft 일일 활동 수집 결과 */
+export interface LogicraftDailyActivity {
+  projectName: string;
+  date: string;
+  modifiedItems: LogicraftItemSummary[];
+  proposals: LogicraftProposal[];
+}

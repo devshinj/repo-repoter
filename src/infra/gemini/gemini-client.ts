@@ -1,6 +1,6 @@
 // src/infra/gemini/gemini-client.ts
 import { GoogleGenAI } from "@google/genai";
-import type { CommitRecord, DailyTask } from "@/core/types";
+import type { CommitRecord, DailyTask, LogicraftItemSummary, LogicraftProposal } from "@/core/types";
 
 let client: GoogleGenAI | null = null;
 
@@ -213,6 +213,69 @@ export async function generateHrmsTaskContent(
       model: "gemini-2.5-flash-lite",
       contents: prompt,
     })
+  );
+
+  return parseHrmsTaskResponse(result.text ?? "");
+}
+
+export function buildLogicraftTaskPrompt(
+  projectName: string,
+  logicraftProjectName: string,
+  date: string,
+  items: LogicraftItemSummary[],
+  proposals: LogicraftProposal[],
+): string {
+  const itemLines = items
+    .map((item) => `- [${item.id}] ${item.type}: ${item.title} (상태: ${item.status}, v${item.version})`)
+    .join("\n");
+
+  const proposalLines = proposals.length > 0
+    ? proposals
+        .map((p) => `- [${p.target_id}] ${p.status}: ${p.rationale}`)
+        .join("\n")
+    : "없음";
+
+  return `아래 LogiCraft 설계 산출물 수정 이력을 기반으로 ${date} 업무 내용을 작성해주세요.
+
+[프로젝트: ${logicraftProjectName}]
+
+[수정된 ITEM 목록 (${items.length}건)]
+${itemLines || "없음"}
+
+[변경 제안 (${proposals.length}건)]
+${proposalLines}
+
+출력 형식:
+첫 줄은 반드시 "TITLE: " 로 시작하는 업무 제목 (작업 내역을 아우르는 20자 이내 요약, 프로젝트명·날짜 포함 금지)
+다음 줄부터 업무 상세 내용
+
+작성 규칙:
+- ITEM ID와 타입을 구체적으로 언급 (예: "REQ-005 요구사항 정의", "FEAT-012 기능 상세화")
+- 어떤 설계 산출물을 어떻게 변경했는지 구체적으로 기재
+- 관련된 ITEM 수정은 하나의 항목으로 묶되, 서로 다른 작업은 별도 항목으로 분리
+- 각 항목은 "- " 로 시작하는 개조식
+- 한국어, 텍스트만 응답 (JSON/마크다운 코드블록 불필요)
+
+제목 예시:
+- "도메인 모델 요구사항 정의"
+- "API 엔드포인트 설계 및 시퀀스 다이어그램 작성"`;
+}
+
+export async function generateLogicraftTaskContent(
+  projectName: string,
+  logicraftProjectName: string,
+  date: string,
+  items: LogicraftItemSummary[],
+  proposals: LogicraftProposal[],
+): Promise<{ title: string; description: string }> {
+  const genai = getClient();
+  const prompt = buildLogicraftTaskPrompt(projectName, logicraftProjectName, date, items, proposals);
+
+  const result = await withRetry(() =>
+    genai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: prompt,
+    }),
   );
 
   return parseHrmsTaskResponse(result.text ?? "");
