@@ -79,9 +79,10 @@ export async function POST(request: NextRequest) {
         );
       }
       syncResults.push({ repo: repoLabel, commitsProcessed: result.commitsProcessed });
-    } catch (err: any) {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       return NextResponse.json(
-        { error: `동기화 실패: ${repoLabel}`, failedRepo: repoLabel, detail: err.message },
+        { error: `동기화 실패: ${repoLabel}`, failedRepo: repoLabel, detail },
         { status: 500 },
       );
     }
