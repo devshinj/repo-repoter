@@ -18,6 +18,7 @@ import { ApiKeyForm } from "@/components/hrms/api-key-form";
 import { MappingCard } from "@/components/hrms/mapping-card";
 import { MappingModal } from "@/components/hrms/mapping-modal";
 import { RegisterHistory } from "@/components/hrms/register-history";
+import { ProjectCarousel } from "@/components/hrms/project-carousel";
 
 export default function HrmsPage() {
   const [keyInfo, setKeyInfo] = useState<any>(null);
@@ -125,6 +126,9 @@ export default function HrmsPage() {
           <Button size="sm" variant="outline" onClick={() => setDeleteKeyDialogOpen(true)}>Key 삭제</Button>
         </div>
       </div>
+
+      {/* 참여 프로젝트 캐러셀 */}
+      <ProjectCarousel />
 
       {/* 안내 문구 */}
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
