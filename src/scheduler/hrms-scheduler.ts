@@ -221,7 +221,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
   for (const type of activityItemTypes) {
     try {
       const items = await listItems(logicraftApiKey, mapping.logicraft_project_id, type, { limit: 200 });
-      modifiedItems.push(...items.filter((item) => isOnDate(item.updated_at, date)));
+      modifiedItems.push(...items.filter((item) => isOnDate(item.last_updated_at, date)));
     } catch { /* 타입별 조회 실패 무시 */ }
   }
 
@@ -229,7 +229,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
   try {
     const allProposals = await listProposals(logicraftApiKey, mapping.logicraft_project_id);
     proposals = allProposals.filter(
-      (p) => isOnDate(p.created_at, date) || (p.resolved_at && isOnDate(p.resolved_at, date)),
+      (p) => isOnDate(p.createdAt, date) || (p.resolvedAt && isOnDate(p.resolvedAt, date)),
     );
   } catch { /* 무시 */ }
 

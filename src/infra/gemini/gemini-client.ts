@@ -226,12 +226,12 @@ export function buildLogicraftTaskPrompt(
   proposals: LogicraftProposal[],
 ): string {
   const itemLines = items
-    .map((item) => `- [${item.id}] ${item.type}: ${item.title} (상태: ${item.status}, v${item.version})`)
+    .map((item) => `- [${item.id}] ${item.type}: ${item.title} (상태: ${item.status}, v${item.current_version})`)
     .join("\n");
 
   const proposalLines = proposals.length > 0
     ? proposals
-        .map((p) => `- [${p.target_id}] ${p.status}: ${p.rationale}`)
+        .map((p) => `- [${p.itemId}] ${p.status}: ${p.rationale}`)
         .join("\n")
     : "없음";
 

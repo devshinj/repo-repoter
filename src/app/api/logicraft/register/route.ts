@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   for (const type of activityItemTypes) {
     try {
       const items = await listItems(logicraftApiKey, mapping.logicraft_project_id, type, { limit: 200 });
-      const filtered = items.filter((item) => isOnDate(item.updated_at, date));
+      const filtered = items.filter((item) => isOnDate(item.last_updated_at, date));
       modifiedItems.push(...filtered);
     } catch { /* 타입별 조회 실패 무시 */ }
   }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   try {
     const allProposals = await listProposals(logicraftApiKey, mapping.logicraft_project_id);
     proposals = allProposals.filter(
-      (p) => isOnDate(p.created_at, date) || (p.resolved_at && isOnDate(p.resolved_at, date)),
+      (p) => isOnDate(p.createdAt, date) || (p.resolvedAt && isOnDate(p.resolvedAt, date)),
     );
   } catch { /* 제안 조회 실패 무시 */ }
 

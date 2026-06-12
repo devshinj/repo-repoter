@@ -133,20 +133,20 @@ export interface LogicraftItemSummary {
   type: string;
   title: string;
   status: string;
-  domain_id: string | null;
-  version: number;
-  created_at: string;
-  updated_at: string;
+  change_summary: string | null;
+  last_updated_by: string | null;
+  last_updated_at: string;
+  current_version: number;
 }
 
 /** LogiCraft 변경 제안 요약 */
 export interface LogicraftProposal {
   id: string;
-  target_id: string;
+  itemId: string;
   status: string;
   rationale: string;
-  created_at: string;
-  resolved_at: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 /** LogiCraft 일일 활동 수집 결과 */
