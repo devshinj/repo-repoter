@@ -3,14 +3,21 @@ set -e
 
 cd "$(dirname "$0")"
 
+if [ ! -f .env ]; then
+  echo "ERROR: .env file not found in $(pwd)" >&2
+  exit 1
+fi
+
+DC="docker compose --env-file .env"
+
 echo "=== Stopping containers ==="
-docker compose down
+$DC down
 
 echo "=== Loading image ==="
-docker load -i repo-reporter.tar.gz
+docker load -i autobriify.tar.gz
 
-echo "=== Starting containers ==="
-docker compose up -d
+echo "=== Starting app ==="
+$DC up -d app
 
 echo "=== Done ==="
-docker compose ps
+$DC ps

@@ -213,6 +213,27 @@ export function getTaskLogs(db: Database.Database, userId: string, limit = 50) {
   ).all(userId, limit) as any[];
 }
 
+export function getUnifiedTaskLogs(db: Database.Database, userId: string, limit = 50) {
+  return db.prepare(
+    `SELECT * FROM (
+       SELECT 'git' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
+              tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
+              pm.hrms_project_name, NULL AS logicraft_project_name
+       FROM hrms_task_logs tl
+       JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
+       WHERE pm.user_id = ?
+       UNION ALL
+       SELECT 'logicraft' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
+              tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
+              lm.hrms_project_name, lm.logicraft_project_name
+       FROM hrms_logicraft_task_logs tl
+       JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
+       WHERE lm.user_id = ?
+     ) ORDER BY created_at DESC
+     LIMIT ?`
+  ).all(userId, userId, limit) as any[];
+}
+
 export function hasSuccessLog(db: Database.Database, mappingId: number, targetDate: string): boolean {
   const row = db.prepare(
     "SELECT 1 FROM hrms_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' LIMIT 1"

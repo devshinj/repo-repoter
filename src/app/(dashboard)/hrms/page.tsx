@@ -59,7 +59,7 @@ export default function HrmsPage() {
       if (keyData.registered) {
         const [mappingsRes, logsRes, projectsRes, lcMappingsRes] = await Promise.all([
           fetch("/api/hrms/mappings"),
-          fetch("/api/hrms/register/history?limit=20"),
+          fetch("/api/hrms/register/history?limit=10"),
           fetch("/api/hrms/projects-enriched"),
           fetch("/api/logicraft/mappings"),
         ]);
@@ -198,7 +198,7 @@ export default function HrmsPage() {
         </div>
         <div className="flex gap-2">
           <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>
-            <Plus className="h-4 w-4 mr-1" /> 프로젝트 매핑 추가
+            <Plus className="h-4 w-4 mr-1" /> 저장소 매핑 추가
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setLcEditing(null); setLcModalOpen(true); }}>
             <Blocks className="h-4 w-4 mr-1" /> LogiCraft 매핑 추가
@@ -291,7 +291,7 @@ export default function HrmsPage() {
 
       {/* 등록 이력 */}
       <div>
-        <h3 className="text-sm font-medium mb-3">등록 이력</h3>
+        <h3 className="text-sm font-medium mb-3">등록 이력 <span className="text-muted-foreground font-normal">최근 10건</span></h3>
         <RegisterHistory logs={logs} />
       </div>
 

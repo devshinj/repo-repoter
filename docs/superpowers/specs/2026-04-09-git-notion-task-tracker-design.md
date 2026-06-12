@@ -1,4 +1,4 @@
-# Repo Repoter 설계 스펙
+# AutoBriify 설계 스펙
 
 ## Context
 

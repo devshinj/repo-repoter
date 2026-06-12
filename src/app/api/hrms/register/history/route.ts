@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
-import { getTaskLogs } from "@/infra/db/hrms";
+import { getUnifiedTaskLogs } from "@/infra/db/hrms";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -9,6 +9,6 @@ export async function GET(request: NextRequest) {
 
   const limit = parseInt(request.nextUrl.searchParams.get("limit") ?? "50", 10);
   const db = getDb();
-  const logs = getTaskLogs(db, session.user.id, limit);
+  const logs = getUnifiedTaskLogs(db, session.user.id, limit);
   return NextResponse.json(logs);
 }

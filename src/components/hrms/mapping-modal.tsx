@@ -112,7 +112,7 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl w-[90vw]">
         <DialogHeader>
-          <DialogTitle>{editing ? "프로젝트 매핑 수정" : "프로젝트 매핑 추가"}</DialogTitle>
+          <DialogTitle>{editing ? "저장소 매핑 수정" : "저장소 매핑 추가"}</DialogTitle>
         </DialogHeader>
 
         {loading ? (

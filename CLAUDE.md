@@ -1,8 +1,8 @@
-# CLAUDE.md — Repo Repoter
+# CLAUDE.md — AutoBriify
 
 ## Project Overview
 
-Git 커밋을 자동 수집하고 Gemini AI로 분석하여 프로젝트별 일일 업무 기록을 생성하는 Next.js 풀스택 서비스.
+저장소·워크스페이스 기반 작업 이력을 자동 수집하고 AI로 분석하여 보고서 생성 및 업무보고를 자동화하는 Next.js 풀스택 서비스.
 
 ## Development Methodology
 

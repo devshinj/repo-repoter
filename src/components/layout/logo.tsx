@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { LogoConceptA } from "@/components/ui/sympol";
 
@@ -11,20 +11,29 @@ function getRandomChar() {
 }
 
 export function Logo({ asLink = true }: { asLink?: boolean }) {
-  const text = "Repo Repoter";
+  const text = "AutoBriify";
   const [displayText, setDisplayText] = useState("");
   const [isTyped, setIsTyped] = useState(false);
   const [isGlitching, setIsGlitching] = useState(false);
   const [glitchText, setGlitchText] = useState(text);
   const [showCursor, setShowCursor] = useState(true);
 
+  // ref로 진행 상태 유지 (Strict Mode 이중 마운트 대응)
+  const typeIndexRef = useRef(0);
+  const glitchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // 초기 타이핑 애니메이션
   useEffect(() => {
-    let i = 0;
+    if (typeIndexRef.current > text.length) {
+      setDisplayText(text);
+      setIsTyped(true);
+      return;
+    }
+
     const interval = setInterval(() => {
-      if (i <= text.length) {
-        setDisplayText(text.slice(0, i));
-        i++;
+      if (typeIndexRef.current <= text.length) {
+        setDisplayText(text.slice(0, typeIndexRef.current));
+        typeIndexRef.current++;
       } else {
         clearInterval(interval);
         setIsTyped(true);
@@ -43,6 +52,15 @@ export function Logo({ asLink = true }: { asLink?: boolean }) {
     return () => clearInterval(interval);
   }, [isTyped]);
 
+  // 글리치 interval 정리
+  useEffect(() => {
+    return () => {
+      if (glitchIntervalRef.current) {
+        clearInterval(glitchIntervalRef.current);
+      }
+    };
+  }, []);
+
   // 호버 글리치
   const triggerGlitch = useCallback(() => {
     if (isGlitching || !isTyped) return;
@@ -51,7 +69,7 @@ export function Logo({ asLink = true }: { asLink?: boolean }) {
     let iterations = 0;
     const maxIterations = 8;
 
-    const interval = setInterval(() => {
+    glitchIntervalRef.current = setInterval(() => {
       setGlitchText(
         text
           .split("")
@@ -68,7 +86,8 @@ export function Logo({ asLink = true }: { asLink?: boolean }) {
       iterations++;
 
       if (iterations > maxIterations) {
-        clearInterval(interval);
+        clearInterval(glitchIntervalRef.current!);
+        glitchIntervalRef.current = null;
         setGlitchText(text);
         setIsGlitching(false);
       }
@@ -139,7 +158,7 @@ export function Logo({ asLink = true }: { asLink?: boolean }) {
       {/* 호버 시 서브텍스트 */}
       <div className="overflow-hidden h-0 group-hover:h-4 transition-all duration-300 ease-out">
         <p className="font-mono text-[10px] text-muted-foreground/50 tracking-widest uppercase mt-0.5">
-          commits in, reports out
+          auto brief, simplified
         </p>
       </div>
     </div>

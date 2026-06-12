@@ -14,9 +14,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { GitBranch, Plus, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { GitBranch, Plus, Pencil, RefreshCw, Trash2, BookOpen } from "lucide-react";
 import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
 import { GitProviderIcon } from "@/components/data-display/git-provider-icon";
+import { CredentialGuideModal } from "@/components/settings/credential-guide-modal";
 
 interface Credential {
   id: number;
@@ -54,6 +55,7 @@ export default function SettingsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
+  const [guideOpen, setGuideOpen] = useState(false);
   const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
   const [editingLabelValue, setEditingLabelValue] = useState("");
   const [renewingTokenId, setRenewingTokenId] = useState<number | null>(null);
@@ -166,11 +168,12 @@ export default function SettingsPage() {
       <Header title="설정" description="외부 서비스 자격증명을 관리합니다" />
 
       <div className="space-y-6 max-w-2xl">
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-          <DialogTrigger render={<Button />}>
-            <Plus className="mr-2 h-4 w-4" />
-            새 자격증명 등록
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogTrigger render={<Button />}>
+              <Plus className="mr-2 h-4 w-4" />
+              새 자격증명 등록
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>새 자격증명 등록</DialogTitle>
@@ -258,7 +261,12 @@ export default function SettingsPage() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+          <Button variant="outline" size="sm" onClick={() => setGuideOpen(true)}>
+            <BookOpen className="h-4 w-4 mr-1.5" />
+            등록 가이드
+          </Button>
+        </div>
 
         {gitCredentials.length > 0 && (
           <div className="space-y-3">
@@ -383,6 +391,8 @@ export default function SettingsPage() {
         description="이 자격증명을 삭제하시겠습니까? 이 자격증명을 사용하는 저장소의 동기화가 중단될 수 있습니다."
         onConfirm={handleDeleteConfirm}
       />
+
+      <CredentialGuideModal open={guideOpen} onOpenChange={setGuideOpen} />
     </div>
   );
 }
