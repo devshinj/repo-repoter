@@ -21,11 +21,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Info, ExternalLink, Unlink, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, Info, ExternalLink, Unlink, RefreshCw, Loader2, AlertTriangle, Blocks, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { ApiKeyForm } from "@/components/hrms/api-key-form";
 import { MappingCard } from "@/components/hrms/mapping-card";
 import { MappingModal } from "@/components/hrms/mapping-modal";
+import { LogicraftMappingCard } from "@/components/hrms/logicraft-mapping-card";
+import { LogicraftMappingModal } from "@/components/hrms/logicraft-mapping-modal";
 import { RegisterHistory } from "@/components/hrms/register-history";
 import { ProjectCarousel } from "@/components/hrms/project-carousel";
 
@@ -43,6 +45,10 @@ export default function HrmsPage() {
   const [newApiKey, setNewApiKey] = useState("");
   const [changingKey, setChangingKey] = useState(false);
   const [duplicateDialog, setDuplicateDialog] = useState<{ mappingId: number; targetDate: string } | null>(null);
+  const [lcMappings, setLcMappings] = useState<any[]>([]);
+  const [lcModalOpen, setLcModalOpen] = useState(false);
+  const [lcEditing, setLcEditing] = useState<any>(null);
+  const [lcDuplicateDialog, setLcDuplicateDialog] = useState<{ mappingId: number; targetDate: string } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -51,15 +57,17 @@ export default function HrmsPage() {
       setKeyInfo(keyData);
 
       if (keyData.registered) {
-        const [mappingsRes, logsRes, projectsRes] = await Promise.all([
+        const [mappingsRes, logsRes, projectsRes, lcMappingsRes] = await Promise.all([
           fetch("/api/hrms/mappings"),
           fetch("/api/hrms/register/history?limit=20"),
           fetch("/api/hrms/projects-enriched"),
+          fetch("/api/logicraft/mappings"),
         ]);
         setMappings(await mappingsRes.json());
         setLogs(await logsRes.json());
         const projData = await projectsRes.json();
         setProjects(Array.isArray(projData) ? projData : []);
+        setLcMappings(await lcMappingsRes.json().catch(() => []));
       }
     } finally {
       setLoading(false);
@@ -95,6 +103,35 @@ export default function HrmsPage() {
     const res = await fetch(`/api/hrms/mappings/${mappingId}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("매핑이 삭제되었습니다.");
+      loadData();
+    }
+  }
+
+  async function handleLcRegister(mappingId: number, targetDate?: string, force?: boolean) {
+    const res = await fetch("/api/logicraft/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mappingId, targetDate, force }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error);
+    } else if (data.duplicate) {
+      setLcDuplicateDialog({ mappingId, targetDate: data.date });
+    } else if (data.skipped) {
+      toast.info("해당 날짜에 LogiCraft 활동이 없어 등록을 건너뛰었습니다.");
+    } else if (data.action === "updated") {
+      toast.success(`기존 업무 업데이트 완료 (HRMS #${data.hrmsTaskId})`);
+    } else {
+      toast.success(`업무 등록 완료 (HRMS #${data.hrmsTaskId})`);
+    }
+    loadData();
+  }
+
+  async function handleLcDelete(mappingId: number) {
+    const res = await fetch(`/api/logicraft/mappings/${mappingId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("LogiCraft 매핑이 삭제되었습니다.");
       loadData();
     }
   }
@@ -159,9 +196,14 @@ export default function HrmsPage() {
             </Button>
           </a>
         </div>
-        <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>
-          <Plus className="h-4 w-4 mr-1" /> 프로젝트 매핑 추가
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>
+            <Plus className="h-4 w-4 mr-1" /> 프로젝트 매핑 추가
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setLcEditing(null); setLcModalOpen(true); }}>
+            <Blocks className="h-4 w-4 mr-1" /> LogiCraft 매핑 추가
+          </Button>
+        </div>
       </div>
 
       {/* 사용자 정보 */}
@@ -192,26 +234,58 @@ export default function HrmsPage() {
       </div>
 
       {/* 매핑 카드 목록 */}
-      <div className="grid gap-4">
-        {mappings.length === 0 ? (
+      <div className="space-y-6">
+        {/* Repo 매핑 카드 */}
+        {mappings.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+              <GitBranch className="h-3.5 w-3.5" />
+              Repo 매핑
+            </h3>
+            <div className="grid gap-4">
+              {mappings.map((m: any) => {
+                const proj = projects.find((p: any) => p.id === m.hrms_project_id);
+                return (
+                  <MappingCard
+                    key={m.id}
+                    mapping={m}
+                    projectStatus={proj?.status}
+                    statusLabel={proj?.statusLabel}
+                    onRegister={handleRegister}
+                    onEdit={(mapping) => { setEditing(mapping); setModalOpen(true); }}
+                    onDelete={handleDelete}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* LogiCraft 매핑 카드 */}
+        {lcMappings.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+              <Blocks className="h-3.5 w-3.5" />
+              LogiCraft 매핑
+            </h3>
+            <div className="grid gap-4">
+              {lcMappings.map((m: any) => (
+                <LogicraftMappingCard
+                  key={m.id}
+                  mapping={m}
+                  onRegister={handleLcRegister}
+                  onEdit={(mapping) => { setLcEditing(mapping); setLcModalOpen(true); }}
+                  onDelete={handleLcDelete}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mappings.length === 0 && lcMappings.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-8">
             프로젝트 매핑이 없습니다. 위 버튼으로 추가해주세요.
           </p>
-        ) : (
-          mappings.map((m: any) => {
-            const proj = projects.find((p: any) => p.id === m.hrms_project_id);
-            return (
-              <MappingCard
-                key={m.id}
-                mapping={m}
-                projectStatus={proj?.status}
-                statusLabel={proj?.statusLabel}
-                onRegister={handleRegister}
-                onEdit={(mapping) => { setEditing(mapping); setModalOpen(true); }}
-                onDelete={handleDelete}
-              />
-            );
-          })
         )}
       </div>
 
@@ -227,6 +301,34 @@ export default function HrmsPage() {
         onSave={loadData}
         editing={editing}
       />
+
+      <LogicraftMappingModal
+        open={lcModalOpen}
+        onClose={() => { setLcModalOpen(false); setLcEditing(null); }}
+        onSave={loadData}
+        editing={lcEditing}
+      />
+
+      {/* LogiCraft 중복 등록 확인 모달 */}
+      <AlertDialog open={!!lcDuplicateDialog} onOpenChange={(open) => !open && setLcDuplicateDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>기존 업무 업데이트</AlertDialogTitle>
+            <AlertDialogDescription>
+              {lcDuplicateDialog?.targetDate}에 이미 등록된 업무가 있습니다. LogiCraft 활동을 기반으로 기존 업무를 업데이트합니다. 진행하시겠습니까?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (lcDuplicateDialog) {
+                handleLcRegister(lcDuplicateDialog.mappingId, lcDuplicateDialog.targetDate, true);
+              }
+              setLcDuplicateDialog(null);
+            }}>등록</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 연결 해제 경고 모달 */}
       <AlertDialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>

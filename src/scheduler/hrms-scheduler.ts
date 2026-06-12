@@ -7,14 +7,23 @@ import {
   getLastSuccessLog,
   insertTaskLog,
 } from "@/infra/db/hrms";
+import {
+  getAutoRegisterLogicraftMappings,
+  getLogicraftMappingById,
+  getLogicraftApiKey,
+  hasLogicraftSuccessLog,
+  insertLogicraftTaskLog,
+} from "@/infra/db/logicraft";
 import { getCommitsByDateRange } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
-import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
+import { generateHrmsTaskContent, generateLogicraftTaskContent } from "@/infra/gemini/gemini-client";
+import { listItems, listProposals, activityItemTypes } from "@/infra/logicraft/logicraft-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
-import type { CommitRecord } from "@/core/types";
+import type { CommitRecord, LogicraftItemSummary, LogicraftProposal } from "@/core/types";
 
 const jobs = new Map<number, ScheduledTask>();
+const logicraftJobs = new Map<number, ScheduledTask>();
 
 function getYesterdayDate(): string {
   const d = new Date();
@@ -155,17 +164,142 @@ export function startHrmsScheduler(): void {
     jobs.set(m.id, task);
   }
 
-  console.log(`[HrmsScheduler] Started — ${mappings.length} auto-register jobs`);
+  // LogiCraft 자동 등록 매핑
+  const lcMappings = getAutoRegisterLogicraftMappings(db);
+  for (const m of lcMappings) {
+    const cronExpr = m.cron_time || "0 9 * * 1-5";
+    const task = cron.schedule(cronExpr, () => {
+      executeLogicraftRegistration(m.id).catch(console.error);
+    });
+    logicraftJobs.set(m.id, task);
+  }
+
+  console.log(`[HrmsScheduler] Started — ${mappings.length} repo + ${lcMappings.length} LogiCraft auto-register jobs`);
 }
 
 export function stopHrmsScheduler(): void {
-  for (const [id, task] of jobs) {
+  for (const [, task] of jobs) {
     task.stop();
   }
   jobs.clear();
+  for (const [, task] of logicraftJobs) {
+    task.stop();
+  }
+  logicraftJobs.clear();
   console.log("[HrmsScheduler] Stopped");
 }
 
-export function refreshLogicraftJob(_mappingId: number): void {
-  // Task 10에서 구현
+function isOnDate(isoTimestamp: string, targetDate: string): boolean {
+  return isoTimestamp.startsWith(targetDate);
+}
+
+async function executeLogicraftRegistration(mappingId: number): Promise<void> {
+  const db = getDb();
+  const mapping = getLogicraftMappingById(db, mappingId);
+  if (!mapping) return;
+
+  const date = getYesterdayDate();
+
+  if (hasLogicraftSuccessLog(db, mappingId, date)) {
+    console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: already registered for ${date}, skipping`);
+    return;
+  }
+
+  const logicraftKeyRow = getLogicraftApiKey(db, mapping.user_id);
+  const hrmsKeyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
+
+  if (!logicraftKeyRow || !hrmsKeyRow) {
+    console.error(`[HrmsScheduler] logicraft mapping=${mappingId}: missing API keys`);
+    return;
+  }
+
+  const logicraftApiKey = decrypt(logicraftKeyRow.encrypted_key);
+  const hrmsApiKey = decrypt(hrmsKeyRow.encrypted_key);
+
+  // LogiCraft 활동 수집
+  const modifiedItems: LogicraftItemSummary[] = [];
+  for (const type of activityItemTypes) {
+    try {
+      const items = await listItems(logicraftApiKey, mapping.logicraft_project_id, type, { limit: 200 });
+      modifiedItems.push(...items.filter((item) => isOnDate(item.updated_at, date)));
+    } catch { /* 타입별 조회 실패 무시 */ }
+  }
+
+  let proposals: LogicraftProposal[] = [];
+  try {
+    const allProposals = await listProposals(logicraftApiKey, mapping.logicraft_project_id);
+    proposals = allProposals.filter(
+      (p) => isOnDate(p.created_at, date) || (p.resolved_at && isOnDate(p.resolved_at, date)),
+    );
+  } catch { /* 무시 */ }
+
+  if (modifiedItems.length === 0 && proposals.length === 0) {
+    console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: no activity on ${date}, skipping`);
+    return;
+  }
+
+  try {
+    const generated = await generateLogicraftTaskContent(
+      mapping.hrms_project_name,
+      mapping.logicraft_project_name,
+      date,
+      modifiedItems,
+      proposals,
+    );
+    const { title, description } = generated;
+    const estimatedMinutes = Math.max(60, Math.min(480, (modifiedItems.length + proposals.length) * 30));
+
+    const created = await createTask(hrmsApiKey, {
+      title,
+      description,
+      projectId: mapping.hrms_project_id,
+      assigneeId: hrmsKeyRow.hrms_user_id ?? undefined,
+      status: "done",
+      priority: "medium",
+      dueDate: date,
+      timeSpentMinutes: estimatedMinutes,
+    });
+
+    insertLogicraftTaskLog(db, {
+      mappingId,
+      hrmsTaskId: created.id,
+      targetDate: date,
+      title,
+      description,
+      status: "success",
+      errorMessage: null,
+    });
+
+    console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: registered task #${created.id} for ${date}`);
+  } catch (err: any) {
+    insertLogicraftTaskLog(db, {
+      mappingId,
+      hrmsTaskId: null,
+      targetDate: date,
+      title: "등록 실패",
+      description: "",
+      status: "error",
+      errorMessage: err.message,
+    });
+    console.error(`[HrmsScheduler] logicraft mapping=${mappingId}: failed -`, err.message);
+  }
+}
+
+export function refreshLogicraftJob(mappingId: number): void {
+  const existing = logicraftJobs.get(mappingId);
+  if (existing) {
+    existing.stop();
+    logicraftJobs.delete(mappingId);
+  }
+
+  const db = getDb();
+  const mapping = getLogicraftMappingById(db, mappingId);
+  if (!mapping || !mapping.auto_register) return;
+
+  const cronExpr = mapping.cron_time || "0 9 * * 1-5";
+  const task = cron.schedule(cronExpr, () => {
+    executeLogicraftRegistration(mappingId).catch(console.error);
+  });
+  logicraftJobs.set(mappingId, task);
+  console.log(`[HrmsScheduler] LogiCraft job registered for mapping=${mappingId} (${cronExpr})`);
 }
