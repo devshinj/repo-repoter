@@ -133,7 +133,7 @@ export default function DashboardPage() {
     maxDailyCommits: 0,
   });
   const [syncing, setSyncing] = useState(false);
-  const [syncingRepoId, setSyncingRepoId] = useState<number | null>(null);
+  const [syncingRepoIds, setSyncingRepoIds] = useState<Set<number>>(new Set());
   const [heatmapData, setHeatmapData] = useState<Record<string, number>>({});
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -198,7 +198,7 @@ export default function DashboardPage() {
   };
 
   const handleRepoSync = async (repoId: number) => {
-    setSyncingRepoId(repoId);
+    setSyncingRepoIds((prev) => new Set(prev).add(repoId));
     try {
       const res = await fetch(`/api/repos/${repoId}/sync`, { method: "POST" });
       const data = await res.json();
@@ -211,7 +211,11 @@ export default function DashboardPage() {
     } catch {
       toast.error("동기화 중 오류 발생");
     } finally {
-      setSyncingRepoId(null);
+      setSyncingRepoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(repoId);
+        return next;
+      });
     }
   };
 
@@ -267,7 +271,7 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
-            <Button onClick={handleSync} disabled={syncing || syncingRepoId !== null} size="sm">
+            <Button onClick={handleSync} disabled={syncing || syncingRepoIds.size > 0} size="sm">
               <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "동기화 중..." : "지금 동기화"}
             </Button>
@@ -295,7 +299,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {repos.map((repo: any) => {
-                const isSyncing = syncingRepoId === repo.id;
+                const isSyncing = syncingRepoIds.has(repo.id);
                 const lastCommitTime = repo.last_commit_at
                   ? formatRelativeDate(repo.last_commit_at)
                   : null;
