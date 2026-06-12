@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,7 +13,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Info, ExternalLink } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Plus, Info, ExternalLink, Unlink, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { ApiKeyForm } from "@/components/hrms/api-key-form";
 import { MappingCard } from "@/components/hrms/mapping-card";
@@ -24,10 +33,15 @@ export default function HrmsPage() {
   const [keyInfo, setKeyInfo] = useState<any>(null);
   const [mappings, setMappings] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [deleteKeyDialogOpen, setDeleteKeyDialogOpen] = useState(false);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [changeKeyDialogOpen, setChangeKeyDialogOpen] = useState(false);
+  const [newApiKey, setNewApiKey] = useState("");
+  const [changingKey, setChangingKey] = useState(false);
   const [duplicateDialog, setDuplicateDialog] = useState<{ mappingId: number; targetDate: string } | null>(null);
 
   const loadData = useCallback(async () => {
@@ -37,12 +51,15 @@ export default function HrmsPage() {
       setKeyInfo(keyData);
 
       if (keyData.registered) {
-        const [mappingsRes, logsRes] = await Promise.all([
+        const [mappingsRes, logsRes, projectsRes] = await Promise.all([
           fetch("/api/hrms/mappings"),
           fetch("/api/hrms/register/history?limit=20"),
+          fetch("/api/hrms/projects-enriched"),
         ]);
         setMappings(await mappingsRes.json());
         setLogs(await logsRes.json());
+        const projData = await projectsRes.json();
+        setProjects(Array.isArray(projData) ? projData : []);
       }
     } finally {
       setLoading(false);
@@ -82,14 +99,43 @@ export default function HrmsPage() {
     }
   }
 
-  async function handleDeleteKey() {
-    await fetch("/api/hrms/key", { method: "DELETE" });
-    setKeyInfo(null);
-    setMappings([]);
-    setLogs([]);
-    setDeleteKeyDialogOpen(false);
-    toast.success("API Key가 삭제되었습니다.");
-    loadData();
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    try {
+      await fetch("/api/hrms/key", { method: "DELETE" });
+      setKeyInfo(null);
+      setMappings([]);
+      setLogs([]);
+      setProjects([]);
+      setDisconnectDialogOpen(false);
+      toast.success("HRMS 연결이 해제되었습니다.");
+      loadData();
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  async function handleChangeKey() {
+    if (!newApiKey.trim()) return;
+    setChangingKey(true);
+    try {
+      const res = await fetch("/api/hrms/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: newApiKey.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error);
+      } else {
+        toast.success(`Key 변경 완료 — ${data.hrmsUserName}`);
+        setChangeKeyDialogOpen(false);
+        setNewApiKey("");
+        loadData();
+      }
+    } finally {
+      setChangingKey(false);
+    }
   }
 
   if (loading) return <div />;
@@ -97,6 +143,8 @@ export default function HrmsPage() {
   if (!keyInfo?.registered) {
     return <ApiKeyForm onRegistered={loadData} />;
   }
+
+  const stats = keyInfo.stats ?? { mappingCount: 0, logCount: 0, autoCount: 0 };
 
   return (
     <div className="space-y-6">
@@ -123,7 +171,14 @@ export default function HrmsPage() {
           {" "}({keyInfo.maskedKey})
         </span>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setDeleteKeyDialogOpen(true)}>Key 삭제</Button>
+          <Button size="sm" variant="outline" onClick={() => { setNewApiKey(""); setChangeKeyDialogOpen(true); }}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Key 변경
+          </Button>
+          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDisconnectDialogOpen(true)}>
+            <Unlink className="h-3.5 w-3.5 mr-1" />
+            연결 해제
+          </Button>
         </div>
       </div>
 
@@ -143,15 +198,20 @@ export default function HrmsPage() {
             프로젝트 매핑이 없습니다. 위 버튼으로 추가해주세요.
           </p>
         ) : (
-          mappings.map((m: any) => (
-            <MappingCard
-              key={m.id}
-              mapping={m}
-              onRegister={handleRegister}
-              onEdit={(mapping) => { setEditing(mapping); setModalOpen(true); }}
-              onDelete={handleDelete}
-            />
-          ))
+          mappings.map((m: any) => {
+            const proj = projects.find((p: any) => p.id === m.hrms_project_id);
+            return (
+              <MappingCard
+                key={m.id}
+                mapping={m}
+                projectStatus={proj?.status}
+                statusLabel={proj?.statusLabel}
+                onRegister={handleRegister}
+                onEdit={(mapping) => { setEditing(mapping); setModalOpen(true); }}
+                onDelete={handleDelete}
+              />
+            );
+          })
         )}
       </div>
 
@@ -168,21 +228,83 @@ export default function HrmsPage() {
         editing={editing}
       />
 
-      <AlertDialog open={deleteKeyDialogOpen} onOpenChange={setDeleteKeyDialogOpen}>
+      {/* 연결 해제 경고 모달 */}
+      <AlertDialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>API Key 삭제</AlertDialogTitle>
-            <AlertDialogDescription>
-              API Key를 삭제하시겠습니까? 모든 매핑의 자동 등록이 중단됩니다.
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              HRMS 연결 해제
+            </AlertDialogTitle>
+            <AlertDialogDescription className="sr-only">
+              HRMS 연결 해제 확인
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{keyInfo.hrmsUserName}</span> 계정의 HRMS 연결을 해제합니다.
+            </p>
+            <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2.5 text-sm space-y-1">
+              <p className="font-medium text-destructive">다음 데이터가 모두 삭제됩니다:</p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
+                <li>프로젝트 매핑 <span className="font-medium text-foreground">{stats.mappingCount}건</span></li>
+                <li>등록 이력 <span className="font-medium text-foreground">{stats.logCount}건</span></li>
+                {stats.autoCount > 0 && (
+                  <li>자동 등록 스케줄 <span className="font-medium text-foreground">{stats.autoCount}건</span> 중단</li>
+                )}
+                <li>저장된 API Key</li>
+              </ul>
+            </div>
+            <p className="text-xs text-muted-foreground">이미 HRMS에 등록된 업무는 삭제되지 않습니다.</p>
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteKey}>삭제</AlertDialogAction>
+            <AlertDialogCancel disabled={disconnecting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Unlink className="h-4 w-4 mr-1" />}
+              연결 해제
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Key 변경 모달 */}
+      <Dialog open={changeKeyDialogOpen} onOpenChange={setChangeKeyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>API Key 변경</DialogTitle>
+            <DialogDescription>
+              새로운 HRMS API Key를 입력하세요. 기존 매핑과 이력은 유지됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              현재: <span className="font-medium text-foreground">{keyInfo.hrmsUserName}</span> ({keyInfo.maskedKey})
+            </div>
+            <Input
+              type="password"
+              placeholder="sk_xxxxxxxx_..."
+              value={newApiKey}
+              onChange={(e) => setNewApiKey(e.target.value)}
+              disabled={changingKey}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeKeyDialogOpen(false)} disabled={changingKey}>
+              취소
+            </Button>
+            <Button onClick={handleChangeKey} disabled={!newApiKey.trim() || changingKey}>
+              {changingKey ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+              변경
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 중복 등록 확인 모달 */}
       <AlertDialog open={!!duplicateDialog} onOpenChange={(open) => !open && setDuplicateDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

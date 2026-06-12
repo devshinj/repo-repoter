@@ -218,6 +218,14 @@ export function updateSyncStatus(db: Database.Database, id: number, status: stri
   ).run(status, id);
 }
 
+/** 원자적 CAS — sync_status가 ready/error일 때만 syncing으로 전환. 이미 syncing이면 false 반환 */
+export function trySyncStart(db: Database.Database, id: number): boolean {
+  const result = db.prepare(
+    "UPDATE repositories SET sync_status = 'syncing', updated_at = datetime('now') WHERE id = ? AND sync_status IN ('ready', 'error')"
+  ).run(id);
+  return result.changes > 0;
+}
+
 export function updateLabel(db: Database.Database, id: number, userId: string, label: string | null): boolean {
   const result = db.prepare(
     "UPDATE repositories SET label = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"

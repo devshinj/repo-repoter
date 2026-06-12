@@ -267,7 +267,7 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
-            <Button onClick={handleSync} disabled={syncing} size="sm">
+            <Button onClick={handleSync} disabled={syncing || syncingRepoId !== null} size="sm">
               <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "동기화 중..." : "지금 동기화"}
             </Button>
@@ -333,7 +333,7 @@ export default function DashboardPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleRepoSync(repo.id)}
-                        disabled={isSyncing}
+                        disabled={isSyncing || syncing}
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                         {isSyncing ? "동기화 중..." : "동기화"}

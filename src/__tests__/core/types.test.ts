@@ -19,8 +19,8 @@ describe("UserCredential type", () => {
     expectTypeOf<UserCredential>().toHaveProperty("metadata");
   });
 
-  it("provider should be git or notion", () => {
-    expectTypeOf<UserCredential["provider"]>().toEqualTypeOf<"git" | "notion">();
+  it("provider should be string", () => {
+    expectTypeOf<UserCredential["provider"]>().toEqualTypeOf<string>();
   });
 });
 

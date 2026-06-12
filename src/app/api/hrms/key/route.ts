@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
-import { getHrmsApiKey, upsertHrmsApiKey, deleteHrmsApiKey } from "@/infra/db/hrms";
+import { getHrmsApiKey, upsertHrmsApiKey, deleteAllHrmsDataByUser, getHrmsStats, getMappingsByUser } from "@/infra/db/hrms";
 import { encrypt, decrypt, maskToken } from "@/infra/crypto/token-encryption";
 import { verifyApiKey } from "@/infra/hrms/hrms-client";
 
@@ -16,12 +16,15 @@ export async function GET() {
     return NextResponse.json({ registered: false });
   }
 
+  const stats = getHrmsStats(db, session.user.id);
+
   return NextResponse.json({
     registered: true,
     hrmsUserName: row.hrms_user_name,
     scopes: row.scopes ? JSON.parse(row.scopes) : null,
     maskedKey: maskToken(decrypt(row.encrypted_key)),
     createdAt: row.created_at,
+    stats,
   });
 }
 
@@ -71,6 +74,20 @@ export async function DELETE() {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();
-  deleteHrmsApiKey(db, session.user.id);
-  return NextResponse.json({ message: "API key deleted" });
+
+  // 삭제 전 매핑 ID 보존 (스케줄러 정리용)
+  const mappingIds = getMappingsByUser(db, session.user.id).map((m: any) => m.id);
+
+  // 관련 데이터 전체 cascade 삭제
+  deleteAllHrmsDataByUser(db, session.user.id);
+
+  // 스케줄러 job 정리 (DB에서 매핑이 없으므로 job만 stop)
+  if (mappingIds.length > 0) {
+    const { refreshJob } = await import("@/scheduler/hrms-scheduler");
+    for (const id of mappingIds) {
+      refreshJob(id);
+    }
+  }
+
+  return NextResponse.json({ message: "HRMS connection disconnected" });
 }

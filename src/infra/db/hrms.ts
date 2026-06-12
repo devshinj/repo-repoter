@@ -33,6 +33,46 @@ export function deleteHrmsApiKey(db: Database.Database, userId: string): void {
   db.prepare("DELETE FROM hrms_api_keys WHERE user_id = ?").run(userId);
 }
 
+export function getHrmsStats(db: Database.Database, userId: string) {
+  const mappingCount = (db.prepare(
+    "SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ?"
+  ).get(userId) as any)?.cnt ?? 0;
+
+  const logCount = (db.prepare(
+    `SELECT COUNT(*) as cnt FROM hrms_task_logs tl
+     JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
+     WHERE pm.user_id = ?`
+  ).get(userId) as any)?.cnt ?? 0;
+
+  const autoCount = (db.prepare(
+    "SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ? AND auto_register = 1"
+  ).get(userId) as any)?.cnt ?? 0;
+
+  return { mappingCount, logCount, autoCount };
+}
+
+export function deleteAllHrmsDataByUser(db: Database.Database, userId: string): void {
+  const deleteTx = db.transaction(() => {
+    // 매핑 ID 목록 조회
+    const mappingIds = db.prepare(
+      "SELECT id FROM hrms_project_mappings WHERE user_id = ?"
+    ).all(userId).map((r: any) => r.id);
+
+    if (mappingIds.length > 0) {
+      const placeholders = mappingIds.map(() => "?").join(",");
+      // 등록 이력 삭제
+      db.prepare(`DELETE FROM hrms_task_logs WHERE mapping_id IN (${placeholders})`).run(...mappingIds);
+      // 매핑-저장소 관계 삭제
+      db.prepare(`DELETE FROM hrms_mapping_repos WHERE mapping_id IN (${placeholders})`).run(...mappingIds);
+    }
+    // 매핑 삭제
+    db.prepare("DELETE FROM hrms_project_mappings WHERE user_id = ?").run(userId);
+    // API Key 삭제
+    db.prepare("DELETE FROM hrms_api_keys WHERE user_id = ?").run(userId);
+  });
+  deleteTx();
+}
+
 // ── hrms_project_mappings + hrms_mapping_repos ──
 
 interface InsertMappingInput {

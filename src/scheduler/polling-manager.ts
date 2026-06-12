@@ -4,6 +4,7 @@ import {
   getActiveUsersWithRepos, getRepositoriesByUser,
   updateLastSyncedSha, insertSyncLogForUser,
   getLatestCacheDate, insertCommitCache, updatePrimaryLanguage,
+  trySyncStart, updateSyncStatus,
   type CacheCommit,
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
@@ -22,6 +23,11 @@ let syncStartedAt: string | null = null;
 
 const repoSyncConcurrency = 3;
 const detailConcurrency = 5;
+
+export interface SyncResult {
+  commitsProcessed: number;
+  tasksCreated: number;
+}
 
 async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: number): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = [];
@@ -49,119 +55,143 @@ export function getSchedulerStatus() {
   return { isRunning, lastRunAt, syncStartedAt, scheduled: cronTask !== null, intervalMin: 15 };
 }
 
-async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, repo: any): Promise<void> {
-  const gitCred = repo.credential_id
-    ? getCredentialById(database, repo.credential_id)
-    : getCredentialByUserAndProvider(database, userId, "git");
-  if (!gitCred) throw new Error("Git credential not found for sync");
+/**
+ * 단일 저장소 동기화. 원자적 잠금(trySyncStart)으로 동시 실행 방지.
+ * 이미 동기화 중이면 null 반환.
+ */
+export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, repo: any): Promise<SyncResult | null> {
+  if (!trySyncStart(database, repo.id)) {
+    console.log(`[Sync] ${repo.owner}/${repo.repo}: already syncing, skipped`);
+    return null;
+  }
 
-  const token = decrypt(gitCred.credential);
-  const meta: GitProviderMeta = gitCred.metadata
-    ? JSON.parse(gitCred.metadata)
-    : { type: "github", host: "github.com", apiBase: "https://api.github.com" };
-
-  const provider = createGitProvider(meta, token);
-
-  // Language
   try {
-    const language = await provider.getRepoLanguage(repo.owner, repo.repo);
-    updatePrimaryLanguage(database, repo.id, language);
-  } catch { /* non-critical */ }
+    const gitCred = repo.credential_id
+      ? getCredentialById(database, repo.credential_id)
+      : getCredentialByUserAndProvider(database, userId, "git");
+    if (!gitCred) throw new Error("Git credential not found for sync");
 
-  // Incremental sync
-  const latestDate = getLatestCacheDate(database, repo.id);
-  const sinceDate = latestDate
-    ? new Date(new Date(latestDate).getTime() - 86400000).toISOString()
-    : (() => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); })();
+    const token = decrypt(gitCred.credential);
+    const meta: GitProviderMeta = gitCred.metadata
+      ? JSON.parse(gitCred.metadata)
+      : { type: "github", host: "github.com", apiBase: "https://api.github.com" };
 
-  const branches = await provider.listBranches(repo.owner, repo.repo);
-  const branchNames = branches.map(b => b.name);
-  const targetBranches = branchNames.length > 0 ? branchNames : [repo.branch];
+    const provider = createGitProvider(meta, token);
 
-  const seenShas = new Set<string>();
-  const newCacheCommits: CacheCommit[] = [];
-  const newCommitRecords: CommitRecord[] = [];
+    // Language
+    try {
+      const language = await provider.getRepoLanguage(repo.owner, repo.repo);
+      updatePrimaryLanguage(database, repo.id, language);
+    } catch { /* non-critical */ }
 
-  for (const br of targetBranches) {
-    let page = 1;
-    while (true) {
-      const commits = await provider.listCommits(repo.owner, repo.repo, {
-        branch: br, since: sinceDate, perPage: 100, page,
-      });
-      if (commits.length === 0) break;
+    // Incremental sync
+    const latestDate = getLatestCacheDate(database, repo.id);
+    const sinceDate = latestDate
+      ? new Date(new Date(latestDate).getTime() - 86400000).toISOString()
+      : (() => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); })();
 
-      const newCommits = commits.filter(c => !seenShas.has(c.sha));
-      const detailed = await pMapFulfilled(
-        newCommits,
-        (c) => provider.getCommitDetail(repo.owner, repo.repo, c.sha),
-        detailConcurrency
-      );
+    const branches = await provider.listBranches(repo.owner, repo.repo);
+    const branchNames = branches.map(b => b.name);
+    const targetBranches = branchNames.length > 0 ? branchNames : [repo.branch];
 
-      for (const c of detailed) {
-        if (seenShas.has(c.sha)) continue;
-        seenShas.add(c.sha);
-        newCacheCommits.push({
-          sha: c.sha, repositoryId: repo.id, branch: br,
-          author: c.author, message: c.message,
-          committedDate: c.date.slice(0, 10), committedAt: c.date,
-          additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
+    const seenShas = new Set<string>();
+    const newCacheCommits: CacheCommit[] = [];
+    const newCommitRecords: CommitRecord[] = [];
+
+    for (const br of targetBranches) {
+      let page = 1;
+      while (true) {
+        const commits = await provider.listCommits(repo.owner, repo.repo, {
+          branch: br, since: sinceDate, perPage: 100, page,
         });
-        newCommitRecords.push({
-          sha: c.sha, message: c.message, author: c.author, date: c.date,
-          repoOwner: repo.owner, repoName: repo.repo, branch: br,
-          filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
-        });
+        if (commits.length === 0) break;
+
+        const newCommits = commits.filter(c => !seenShas.has(c.sha));
+        const detailed = await pMapFulfilled(
+          newCommits,
+          (c) => provider.getCommitDetail(repo.owner, repo.repo, c.sha),
+          detailConcurrency
+        );
+
+        for (const c of detailed) {
+          if (seenShas.has(c.sha)) continue;
+          seenShas.add(c.sha);
+          newCacheCommits.push({
+            sha: c.sha, repositoryId: repo.id, branch: br,
+            author: c.author, message: c.message,
+            committedDate: c.date.slice(0, 10), committedAt: c.date,
+            additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
+          });
+          newCommitRecords.push({
+            sha: c.sha, message: c.message, author: c.author, date: c.date,
+            repoOwner: repo.owner, repoName: repo.repo, branch: br,
+            filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
+          });
+        }
+        if (commits.length < 100) break;
+        page++;
       }
-      if (commits.length < 100) break;
-      page++;
     }
-  }
 
-  // Cache
-  if (newCacheCommits.length > 0) {
-    const inserted = insertCommitCache(database, newCacheCommits);
-    if (inserted > 0) console.log(`[Scheduler] ${repo.owner}/${repo.repo}: cached ${inserted} new commits`);
-  }
+    // Cache
+    if (newCacheCommits.length > 0) {
+      const inserted = insertCommitCache(database, newCacheCommits);
+      if (inserted > 0) console.log(`[Sync] ${repo.owner}/${repo.repo}: cached ${inserted} new commits`);
+    }
 
-  if (newCommitRecords.length === 0) {
-    console.log(`[Scheduler] ${repo.owner}/${repo.repo}: no new commits`);
+    if (newCommitRecords.length === 0) {
+      console.log(`[Sync] ${repo.owner}/${repo.repo}: no new commits`);
+      insertSyncLogForUser(database, {
+        repositoryId: repo.id, userId, status: "success",
+        commitsProcessed: 0, tasksCreated: 0, errorMessage: null,
+      });
+      updateSyncStatus(database, repo.id, "ready");
+      return { commitsProcessed: 0, tasksCreated: 0 };
+    }
+
+    console.log(`[Sync] ${repo.owner}/${repo.repo}: found ${newCommitRecords.length} new commits`);
+
+    // Enrich ambiguous commits
+    const enrichedCommits: CommitRecord[] = [];
+    for (const commit of newCommitRecords) {
+      if (isAmbiguousCommitMessage(commit.message)) {
+        try {
+          const diff = await provider.getCommitDiff(repo.owner, repo.repo, commit.sha);
+          const summary = await analyzeCommitWithDiff(commit, diff);
+          enrichedCommits.push({ ...commit, message: summary });
+        } catch { enrichedCommits.push(commit); }
+      } else {
+        enrichedCommits.push(commit);
+      }
+    }
+
+    // Group + analyze
+    const groups = groupCommitsByDateAndProject(enrichedCommits);
+    let tasksCreated = 0;
+    for (const group of groups) {
+      const tasks = await analyzeCommits(group.commits, group.project, group.date);
+      tasksCreated += tasks.length;
+    }
+
+    updateLastSyncedSha(database, repo.id, newCommitRecords[0].sha);
     insertSyncLogForUser(database, {
       repositoryId: repo.id, userId, status: "success",
-      commitsProcessed: 0, tasksCreated: 0, errorMessage: null,
+      commitsProcessed: newCommitRecords.length, tasksCreated, errorMessage: null,
     });
-    return;
+    console.log(`[Sync] ${repo.owner}/${repo.repo}: synced ${newCommitRecords.length} commits, created ${tasksCreated} tasks`);
+
+    updateSyncStatus(database, repo.id, "ready");
+    return { commitsProcessed: newCommitRecords.length, tasksCreated };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    insertSyncLogForUser(database, {
+      repositoryId: repo.id, userId, status: "error",
+      commitsProcessed: 0, tasksCreated: 0, errorMessage: errorMsg,
+    });
+    updateSyncStatus(database, repo.id, "error");
+    console.error(`[Sync] ${repo.owner}/${repo.repo}: failed -`, errorMsg);
+    throw err;
   }
-
-  console.log(`[Scheduler] ${repo.owner}/${repo.repo}: found ${newCommitRecords.length} new commits`);
-
-  // Enrich ambiguous commits
-  const enrichedCommits: CommitRecord[] = [];
-  for (const commit of newCommitRecords) {
-    if (isAmbiguousCommitMessage(commit.message)) {
-      try {
-        const diff = await provider.getCommitDiff(repo.owner, repo.repo, commit.sha);
-        const summary = await analyzeCommitWithDiff(commit, diff);
-        enrichedCommits.push({ ...commit, message: summary });
-      } catch { enrichedCommits.push(commit); }
-    } else {
-      enrichedCommits.push(commit);
-    }
-  }
-
-  // Group + analyze
-  const groups = groupCommitsByDateAndProject(enrichedCommits);
-  let tasksCreated = 0;
-  for (const group of groups) {
-    const tasks = await analyzeCommits(group.commits, group.project, group.date);
-    tasksCreated += tasks.length;
-  }
-
-  updateLastSyncedSha(database, repo.id, newCommitRecords[0].sha);
-  insertSyncLogForUser(database, {
-    repositoryId: repo.id, userId, status: "success",
-    commitsProcessed: newCommitRecords.length, tasksCreated, errorMessage: null,
-  });
-  console.log(`[Scheduler] ${repo.owner}/${repo.repo}: synced ${newCommitRecords.length} commits, created ${tasksCreated} tasks`);
 }
 
 export async function runSyncCycle(): Promise<void> {
@@ -174,19 +204,8 @@ export async function runSyncCycle(): Promise<void> {
     const userIds = getActiveUsersWithRepos(database);
     for (const userId of userIds) {
       try {
-        const repos = getRepositoriesByUser(database, userId).filter((r: any) => r.sync_status === "ready");
-        const results = await pMap(repos, (repo: any) => syncOneRepo(database, userId, repo), repoSyncConcurrency);
-        for (let i = 0; i < results.length; i++) {
-          if (results[i].status === "rejected") {
-            const repo = repos[i];
-            const errorMsg = (results[i] as PromiseRejectedResult).reason?.message ?? String((results[i] as PromiseRejectedResult).reason);
-            insertSyncLogForUser(database, {
-              repositoryId: repo.id, userId, status: "error",
-              commitsProcessed: 0, tasksCreated: 0, errorMessage: errorMsg,
-            });
-            console.error(`[Scheduler] ${repo.owner}/${repo.repo}: sync failed -`, errorMsg);
-          }
-        }
+        const repos = getRepositoriesByUser(database, userId).filter((r: any) => r.sync_status === "ready" || r.sync_status === "error");
+        await pMap(repos, (repo: any) => syncOneRepo(database, userId, repo).catch(() => {}), repoSyncConcurrency);
       } catch (error) {
         console.error(`[Scheduler] User ${userId}: failed -`, error);
       }
@@ -194,6 +213,7 @@ export async function runSyncCycle(): Promise<void> {
     lastRunAt = new Date().toISOString();
   } finally {
     isRunning = false;
+    syncStartedAt = null;
   }
 }
 
