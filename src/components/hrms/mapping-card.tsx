@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Play, Pencil, Trash2, Loader2, CalendarDays } from "lucide-react";
+import { Play, Pencil, Trash2, Loader2, CalendarDays, ClipboardList } from "lucide-react";
 
 interface MappingCardProps {
   mapping: any;
@@ -36,6 +36,23 @@ export function MappingCard({ mapping, onRegister, onEdit, onDelete }: MappingCa
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+
+  useEffect(() => {
+    setLoadingTasks(true);
+    fetch(`/api/hrms/tasks?projectId=${mapping.hrms_project_id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(tasks => {
+        // Sort by dueDate desc and take first 3
+        const sorted = (Array.isArray(tasks) ? tasks : [])
+          .sort((a: any, b: any) => (b.dueDate || "").localeCompare(a.dueDate || ""))
+          .slice(0, 3);
+        setRecentTasks(sorted);
+      })
+      .catch(() => setRecentTasks([]))
+      .finally(() => setLoadingTasks(false));
+  }, [mapping.hrms_project_id]);
 
   async function handleRegister(targetDate?: string) {
     setRegistering(true);
@@ -71,6 +88,30 @@ export function MappingCard({ mapping, onRegister, onEdit, onDelete }: MappingCa
         <CardContent className="space-y-3">
           <div className="text-sm text-muted-foreground">
             저장소: {mapping.repos.map((r: any) => r.label || `${r.owner}/${r.repo}`).join(", ")}
+          </div>
+          {/* 최근 등록 업무 */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+              <ClipboardList className="h-3 w-3" />
+              최근 등록 업무
+            </div>
+            {loadingTasks ? (
+              <div className="text-xs text-muted-foreground animate-pulse pl-4">불러오는 중...</div>
+            ) : recentTasks.length === 0 ? (
+              <div className="text-xs text-muted-foreground pl-4">등록된 업무 없음</div>
+            ) : (
+              <div className="space-y-0.5 pl-4">
+                {recentTasks.map((task: any) => {
+                  const date = task.dueDate ? task.dueDate.slice(5, 10).replace("-", "/") : "";
+                  return (
+                    <div key={task.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground font-mono w-10 flex-shrink-0">{date}</span>
+                      <span className="truncate">{task.title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={() => handleRegister(getDateString(-1))} disabled={registering}>
