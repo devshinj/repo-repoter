@@ -165,3 +165,7 @@ export function stopHrmsScheduler(): void {
   jobs.clear();
   console.log("[HrmsScheduler] Stopped");
 }
+
+export function refreshLogicraftJob(_mappingId: number): void {
+  // Task 10에서 구현
+}
