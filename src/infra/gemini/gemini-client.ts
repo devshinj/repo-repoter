@@ -225,40 +225,56 @@ export function buildLogicraftTaskPrompt(
   items: LogicraftItemSummary[],
   proposals: LogicraftProposal[],
 ): string {
-  const itemLines = items
-    .map((item) => `- [${item.id}] ${item.type}: ${item.title} (상태: ${item.status}, v${item.current_version})`)
-    .join("\n");
+  // 타입별 그룹핑
+  const grouped = new Map<string, LogicraftItemSummary[]>();
+  for (const item of items) {
+    const list = grouped.get(item.type) ?? [];
+    list.push(item);
+    grouped.set(item.type, list);
+  }
+
+  const groupedLines = Array.from(grouped.entries())
+    .map(([type, typeItems]) => {
+      const details = typeItems
+        .map((item) => {
+          const summary = item.change_summary ? ` — ${item.change_summary}` : "";
+          return `  · ${item.id} ${item.title}${summary}`;
+        })
+        .join("\n");
+      return `[${type}] ${typeItems.length}건\n${details}`;
+    })
+    .join("\n\n");
 
   const proposalLines = proposals.length > 0
     ? proposals
-        .map((p) => `- [${p.itemId}] ${p.status}: ${p.rationale}`)
+        .map((p) => `  · ${p.itemId} (${p.status}): ${p.rationale}`)
         .join("\n")
-    : "없음";
+    : "";
 
-  return `아래 LogiCraft 설계 산출물 수정 이력을 기반으로 ${date} 업무 내용을 작성해주세요.
+  return `아래는 ${date} "${logicraftProjectName}" 프로젝트의 설계 산출물 변경 이력이다.
+이 이력을 바탕으로 당일 수행한 업무 내용을 요약해주세요.
 
-[프로젝트: ${logicraftProjectName}]
-
-[수정된 ITEM 목록 (${items.length}건)]
-${itemLines || "없음"}
-
-[변경 제안 (${proposals.length}건)]
-${proposalLines}
+${groupedLines}
+${proposalLines ? `\n[변경 제안 ${proposals.length}건]\n${proposalLines}` : ""}
 
 출력 형식:
-첫 줄은 반드시 "TITLE: " 로 시작하는 업무 제목 (작업 내역을 아우르는 20자 이내 요약, 프로젝트명·날짜 포함 금지)
+첫 줄은 반드시 "TITLE: " 로 시작하는 업무 제목 (핵심 작업을 20자 이내로 요약, 프로젝트명·날짜 포함 금지)
 다음 줄부터 업무 상세 내용
 
 작성 규칙:
-- ITEM ID와 타입을 구체적으로 언급 (예: "REQ-005 요구사항 정의", "FEAT-012 기능 상세화")
-- 어떤 설계 산출물을 어떻게 변경했는지 구체적으로 기재
-- 관련된 ITEM 수정은 하나의 항목으로 묶되, 서로 다른 작업은 별도 항목으로 분리
-- 각 항목은 "- " 로 시작하는 개조식
+- 같은 목적의 작업은 하나의 항목으로 묶어서 "무엇을 왜 했는지" 중심으로 기술
+- change_summary가 있으면 그 내용을 반영하여 구체적으로 작성
+- ID를 일일이 나열하지 말고, 대표 ID 1~2개만 언급하고 나머지는 "외 N건" 처리
+- 본문 첫 줄에 "프로젝트: ${logicraftProjectName}" 을 명시
+- 각 항목은 "- " 로 시작하는 개조식, 3~6개 항목이 적절
 - 한국어, 텍스트만 응답 (JSON/마크다운 코드블록 불필요)
 
-제목 예시:
-- "도메인 모델 요구사항 정의"
-- "API 엔드포인트 설계 및 시퀀스 다이어그램 작성"`;
+나쁜 예 (ID 나열):
+- FEAT-001, FEAT-002, FEAT-003, FEAT-004 Feature를 v2로 업데이트했습니다.
+
+좋은 예 (의미 중심):
+- 영상 관리 도메인 Feature 4건(FEAT-001 외 3건) 상세 설계: 업로드 워크플로·메타데이터 검증·배치 처리 흐름 구체화
+- CCTV 자원 관리 API 12건(API-050 외 11건) 엔드포인트 설계: 요청/응답 스키마·인증·에러 코드 정의`;
 }
 
 export async function generateLogicraftTaskContent(
