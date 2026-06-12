@@ -253,7 +253,6 @@ export default function DashboardPage() {
     <div>
       <Header
         title={userName ? `${getGreeting()}, ${userName}님` : "대시보드"}
-        description="Git 커밋 모니터링 현황"
         actions={
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 border border-border" title={scheduler.description || undefined}>

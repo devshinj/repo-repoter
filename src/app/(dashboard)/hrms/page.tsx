@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Info } from "lucide-react";
+import { Plus, Info, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { ApiKeyForm } from "@/components/hrms/api-key-form";
 import { MappingCard } from "@/components/hrms/mapping-card";
@@ -101,7 +101,15 @@ export default function HrmsPage() {
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">HRMS 업무 관리</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">HRMS 업무 관리</h1>
+          <a href="https://hrms.cudo.co.kr:9700/" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+              <ExternalLink className="h-3.5 w-3.5" />
+              HRMS 열기
+            </Button>
+          </a>
+        </div>
         <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>
           <Plus className="h-4 w-4 mr-1" /> 프로젝트 매핑 추가
         </Button>

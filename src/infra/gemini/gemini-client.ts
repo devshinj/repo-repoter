@@ -145,28 +145,33 @@ export function buildHrmsTaskPrompt(
 ): string {
   const repoSections = repoCommits.map(({ repoName, commits }) => {
     const commitLines = commits
-      .map((c) => `- ${c.message}`)
+      .map((c) => {
+        const files = c.filesChanged.length > 0
+          ? `\n  변경 파일: ${c.filesChanged.slice(0, 10).join(", ")}${c.filesChanged.length > 10 ? ` 외 ${c.filesChanged.length - 10}건` : ""}`
+          : "";
+        const stats = (c.additions > 0 || c.deletions > 0) ? ` (+${c.additions}/-${c.deletions})` : "";
+        return `- ${c.message}${stats}${files}`;
+      })
       .join("\n");
     return `## ${repoName} (${commits.length}건)\n${commitLines}`;
   }).join("\n\n");
 
-  return `아래 Git 커밋 메시지를 기반으로 ${date} 업무 내용을 작성해주세요.
+  return `아래 Git 커밋 메시지와 변경 파일 정보를 기반으로 ${date} 업무 내용을 작성해주세요.
 
 [커밋 목록]
 ${repoSections}
-
-추정 총 작업 시간: 약 ${estimatedMinutes}분
 
 출력 형식:
 첫 줄은 반드시 "TITLE: " 로 시작하는 업무 제목 (작업 내역을 아우르는 20자 이내 요약, 프로젝트명·날짜 포함 금지)
 다음 줄부터 업무 상세 내용
 
 작성 규칙:
-- 커밋 메시지에 나온 구체적인 작업 내용을 그대로 반영 (추상화·의역 금지)
+- 커밋 메시지와 변경 파일명에 나온 구체적인 작업 내용을 그대로 반영 (추상화·의역 절대 금지)
+- 변경 파일 경로에서 어떤 모듈/컴포넌트를 수정했는지 구체적으로 언급
 - "feat:", "fix:", "refactor:" 등 prefix는 제거하고 내용만 기재
 - 관련된 커밋은 하나의 항목으로 묶되, 서로 다른 작업은 별도 항목으로 분리
 - 각 항목은 "- " 로 시작하는 개조식
-- 마지막 줄에 "추정 작업 시간: 약 N시간 M분" 기재 (${estimatedMinutes}분 기준)
+- 추정 작업 시간은 기재하지 않음
 - 한국어, 텍스트만 응답 (JSON/마크다운 코드블록 불필요)
 - 저장소명 언급 불필요
 
@@ -174,8 +179,8 @@ ${repoSections}
 - "HRMS 업무 자동 등록 기능 구현"
 - "클립보드 복사 개선 및 보고서 뷰 변경"
 
-나쁜 본문 예 (추상적): "프롬프트 엔지니어링 및 관련 로직 수정"
-좋은 본문 예 (구체적): "클립보드 복사 실패 시 안내 메시지 개선 및 보고서 기본 뷰를 preview로 변경"`;
+나쁜 본문 예 (추상적): "API 연동 및 UI 개선 작업", "프롬프트 엔지니어링 및 관련 로직 수정"
+좋은 본문 예 (구체적): "HRMS 매핑 카드에 최근 등록 업무 표시 기능 추가 (hrms-client.ts의 listTasks 활용, mapping-card.tsx에 최근 3건 표시)"`;
 }
 
 export function parseHrmsTaskResponse(text: string): { title: string; description: string } {
