@@ -44,10 +44,25 @@ export async function POST(request: NextRequest) {
   }
 
   const date = targetDate ?? getYesterdayDate();
+  const apiKey = decrypt(keyRow.encrypted_key);
 
-  // 중복 체크: 로컬 로그 기반 + force가 아닌 경우 안내
+  // 중복 체크: 로컬 로그 + HRMS 서버 실제 존재 여부 확인
   if (hasSuccessLog(db, mappingId, date) && !force) {
-    return NextResponse.json({ duplicate: true, date }, { status: 200 });
+    // HRMS에서 해당 날짜 태스크가 실제로 존재하는지 확인
+    let existsInHrms = false;
+    try {
+      const tasks = await listTasks(apiKey, {
+        projectId: mapping.hrms_project_id,
+        dueFrom: date,
+        dueTo: date,
+      });
+      existsInHrms = tasks.length > 0;
+    } catch { /* HRMS 조회 실패 시 로컬 기록 기준으로 판단 */ }
+
+    if (existsInHrms) {
+      return NextResponse.json({ duplicate: true, date }, { status: 200 });
+    }
+    // HRMS에서 삭제된 경우 → 신규 등록으로 진행
   }
 
   const repoIds = mapping.repos.map((r: any) => r.id);
@@ -97,7 +112,6 @@ export async function POST(request: NextRequest) {
   const estimatedMinutes = estimateWorkMinutes(allCommits);
 
   try {
-    const apiKey = decrypt(keyRow.encrypted_key);
     const generated = await generateHrmsTaskContent(
       mapping.hrms_project_name,
       date,
@@ -112,24 +126,21 @@ export async function POST(request: NextRequest) {
     let action: "created" | "updated";
 
     if (force) {
-      // 로컬 로그에서 기존 HRMS task ID 조회
-      const prevLog = getLastSuccessLog(db, mappingId, date);
-      let existingTaskId = prevLog?.hrms_task_id ?? null;
-
-      // 로컬 로그에 없으면 HRMS 서버에서 검색
-      if (!existingTaskId) {
-        try {
-          const tasks = await listTasks(apiKey, {
-            projectId: mapping.hrms_project_id,
-            dueFrom: date,
-            dueTo: date,
-          });
-          if (tasks.length > 0) {
-            existingTaskId = tasks[0].id;
-          }
-        } catch {
-          // 검색 실패 시 새로 생성
+      // HRMS 서버에서 해당 날짜 태스크 검색 (로컬 로그보다 서버 우선)
+      let existingTaskId: number | null = null;
+      try {
+        const tasks = await listTasks(apiKey, {
+          projectId: mapping.hrms_project_id,
+          dueFrom: date,
+          dueTo: date,
+        });
+        if (tasks.length > 0) {
+          existingTaskId = tasks[0].id;
         }
+      } catch {
+        // 검색 실패 시 로컬 로그 fallback
+        const prevLog = getLastSuccessLog(db, mappingId, date);
+        existingTaskId = prevLog?.hrms_task_id ?? null;
       }
 
       if (existingTaskId) {
