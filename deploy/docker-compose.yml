@@ -5,9 +5,11 @@ services:
       - "16000:3000"
     extra_hosts:
       - "hrms.cudo.co.kr:192.168.102.2"
+      - "logicraft.cudo.co.kr:192.168.102.2"
     volumes:
       - app-data:/app/data
     environment:
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       AUTH_HRMS_ID: ${AUTH_HRMS_ID}
       AUTH_HRMS_SECRET: ${AUTH_HRMS_SECRET}
