@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { FileText, FolderGit2, CalendarDays, Trash2, ChevronRight } from "lucide-react";
 import { projectColor, oklch } from "@/lib/color-hash";
 import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
+import { api } from "@/lib/api-url";
 
 interface Report {
   id: number;
@@ -39,7 +40,7 @@ export default function ReportsPage() {
 
   const fetchReports = () => {
     setLoading(true);
-    fetch("/api/reports")
+    fetch(api("/reports"))
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setReports(data); })
       .finally(() => setLoading(false));
@@ -55,7 +56,7 @@ export default function ReportsPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteTarget === null) return;
-    const res = await fetch(`/api/reports/${deleteTarget}`, { method: "DELETE" });
+    const res = await fetch(api(`/reports/${deleteTarget}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("보고서가 삭제되었습니다");
       fetchReports();

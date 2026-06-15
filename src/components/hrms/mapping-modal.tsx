@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -33,8 +34,8 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
     setLoading(true);
     setError(null);
     Promise.all([
-      fetch("/api/hrms/projects").then((r) => r.json()),
-      fetch("/api/repos").then((r) => r.json()),
+      fetch(api("/hrms/projects")).then((r) => r.json()),
+      fetch(api("/repos")).then((r) => r.json()),
     ])
       .then(([p, r]) => {
         setProjects(Array.isArray(p) ? p : []);
@@ -85,7 +86,7 @@ export function MappingModal({ open, onClose, onSave, editing }: MappingModalPro
     };
 
     try {
-      const url = editing ? `/api/hrms/mappings/${editing.id}` : "/api/hrms/mappings";
+      const url = editing ? api(`/hrms/mappings/${editing.id}`) : api("/hrms/mappings");
       const method = editing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,

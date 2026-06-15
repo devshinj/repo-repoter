@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { api } from "@/lib/api-url";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,7 @@ export default function SettingsPage() {
   const [renewTokenValue, setRenewTokenValue] = useState("");
 
   const fetchCredentials = () => {
-    fetch("/api/credentials").then((r) => r.json()).then((data) => {
+    fetch(api("/credentials")).then((r) => r.json()).then((data) => {
       if (Array.isArray(data)) setCredentials(data);
     });
   };
@@ -93,7 +94,7 @@ export default function SettingsPage() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/credentials", {
+      const res = await fetch(api("/credentials"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: newProvider, token: newToken, label: newLabel, metadata }),
@@ -116,7 +117,7 @@ export default function SettingsPage() {
   };
 
   const handleUpdateLabel = async (id: number) => {
-    const res = await fetch(`/api/credentials/${id}`, {
+    const res = await fetch(api(`/credentials/${id}`), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: editingLabelValue }),
@@ -135,7 +136,7 @@ export default function SettingsPage() {
       toast.error("새 토큰을 입력하세요");
       return;
     }
-    const res = await fetch(`/api/credentials/${id}`, {
+    const res = await fetch(api(`/credentials/${id}`), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: renewTokenValue }),
@@ -152,7 +153,7 @@ export default function SettingsPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteTarget === null) return;
-    const res = await fetch(`/api/credentials/${deleteTarget}`, { method: "DELETE" });
+    const res = await fetch(api(`/credentials/${deleteTarget}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("자격증명이 삭제되었습니다");
       fetchCredentials();

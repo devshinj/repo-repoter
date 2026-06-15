@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { api } from "@/lib/api-url";
 import { ChevronLeft, ChevronRight, Briefcase, Calendar, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -147,7 +148,7 @@ export function ProjectCarousel() {
   }
 
   useEffect(() => {
-    fetch("/api/hrms/projects-enriched")
+    fetch(api("/hrms/projects-enriched"))
       .then(r => r.ok ? r.json() : [])
       .then(data => setProjects(Array.isArray(data) ? data : []))
       .catch(() => setProjects([]))

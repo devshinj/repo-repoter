@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/data-display/empty-state";
 import { toast } from "sonner";
+import { api } from "@/lib/api-url";
 import { ArrowLeft, GitBranch, GitCommit } from "lucide-react";
 
 interface Commit {
@@ -52,8 +53,8 @@ export default function RepoDetailPage() {
     async function load() {
       try {
         const [reposRes, branchesRes] = await Promise.all([
-          fetch("/api/repos"),
-          fetch(`/api/repos/${repoId}/branches`),
+          fetch(api("/repos")),
+          fetch(api(`/repos/${repoId}/branches`)),
         ]);
 
         const repos = await reposRes.json();
@@ -83,7 +84,7 @@ export default function RepoDetailPage() {
   useEffect(() => {
     if (!selectedBranch) return;
     setCommitsLoading(true);
-    fetch(`/api/repos/${repoId}/commits?branch=${encodeURIComponent(selectedBranch)}&limit=50`)
+    fetch(api(`/repos/${repoId}/commits?branch=${encodeURIComponent(selectedBranch)}&limit=50`))
       .then((r) => r.json())
       .then((data) => {
         setCommits(Array.isArray(data) ? data : []);
@@ -153,14 +154,14 @@ export default function RepoDetailPage() {
           description={`${selectedBranch} 브랜치에 커밋이 없거나 아직 클론이 완료되지 않았습니다.`}
         />
       ) : (
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-20">SHA</TableHead>
+              <TableHead className="w-[72px]">SHA</TableHead>
               <TableHead>메시지</TableHead>
-              <TableHead className="w-24">작성자</TableHead>
-              <TableHead className="w-40">날짜</TableHead>
-              <TableHead className="w-28 text-right">변경</TableHead>
+              <TableHead className="w-[100px]">작성자</TableHead>
+              <TableHead className="w-[148px]">날짜</TableHead>
+              <TableHead className="w-[88px] text-right">변경</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -171,10 +172,10 @@ export default function RepoDetailPage() {
                   onClick={() => setExpandedSha(expandedSha === commit.sha ? null : commit.sha)}
                 >
                   <TableCell className="font-mono text-xs">{commit.sha.slice(0, 7)}</TableCell>
-                  <TableCell>
-                    <span className="line-clamp-1">{commit.message}</span>
+                  <TableCell className="truncate max-w-0">
+                    <span className="truncate block">{commit.message.split("\n")[0]}</span>
                   </TableCell>
-                  <TableCell className="text-sm">{commit.author}</TableCell>
+                  <TableCell className="text-sm truncate">{commit.author}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{formatDate(commit.date)}</TableCell>
                   <TableCell className="text-right">
                     <span className="text-green-600 text-xs">+{commit.additions}</span>
@@ -182,18 +183,26 @@ export default function RepoDetailPage() {
                     <span className="text-red-600 text-xs">-{commit.deletions}</span>
                   </TableCell>
                 </TableRow>
-                {expandedSha === commit.sha && commit.filesChanged.length > 0 && (
-                  <TableRow key={`${commit.sha}-files`}>
+                {expandedSha === commit.sha && (
+                  <TableRow key={`${commit.sha}-detail`}>
                     <TableCell colSpan={5} className="bg-muted/30 p-0">
-                      <div className="px-6 py-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">
-                          변경된 파일 ({commit.filesChanged.length}개)
-                        </p>
-                        <div className="space-y-0.5">
-                          {commit.filesChanged.map((file) => (
-                            <div key={file} className="text-xs font-mono text-muted-foreground">{file}</div>
-                          ))}
+                      <div className="px-6 py-3 space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">커밋 메시지</p>
+                          <pre className="text-sm whitespace-pre-wrap break-words font-sans">{commit.message}</pre>
                         </div>
+                        {commit.filesChanged.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              변경된 파일 ({commit.filesChanged.length}개)
+                            </p>
+                            <div className="space-y-0.5">
+                              {commit.filesChanged.map((file) => (
+                                <div key={file} className="text-xs font-mono text-muted-foreground">{file}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

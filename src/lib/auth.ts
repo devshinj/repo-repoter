@@ -4,7 +4,10 @@ import bcrypt from "bcryptjs";
 import { getUserByEmail, upsertOAuthUser } from "@/infra/db/repository";
 import { getDb } from "@/infra/db/connection";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       id: "credentials",
@@ -93,6 +96,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: {
-    signIn: "/login",
+    signIn: `${basePath}/login`,
   },
 });

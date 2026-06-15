@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -77,7 +78,7 @@ export function LogicraftMappingCard({ mapping, onRegister, onEdit, onDelete }: 
 
   useEffect(() => {
     setLoadingTasks(true);
-    fetch(`/api/hrms/tasks?projectId=${mapping.hrms_project_id}`)
+    fetch(api(`/hrms/tasks?projectId=${mapping.hrms_project_id}`))
       .then((r) => (r.ok ? r.json() : []))
       .then((tasks) => {
         const sorted = (Array.isArray(tasks) ? tasks : [])

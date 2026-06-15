@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { ArrowLeft, CalendarDays, ClipboardCopy, FolderGit2, Pencil, Save, X } from "lucide-react";
 import { projectColor, oklch } from "@/lib/color-hash";
 import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
+import { api } from "@/lib/api-url";
 
 interface Report {
   id: number;
@@ -41,7 +42,7 @@ export default function ReportDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/reports/${reportId}`)
+    fetch(api(`/reports/${reportId}`))
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setReport)
       .catch(() => toast.error("보고서를 찾을 수 없습니다"))
@@ -65,7 +66,7 @@ export default function ReportDetailPage() {
     if (!editTitle.trim() || !editContent.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/reports/${reportId}`, {
+      const res = await fetch(api(`/reports/${reportId}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: editTitle, content: editContent }),
@@ -81,7 +82,7 @@ export default function ReportDetailPage() {
   }
 
   async function handleDeleteConfirm() {
-    const res = await fetch(`/api/reports/${reportId}`, { method: "DELETE" });
+    const res = await fetch(api(`/reports/${reportId}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("보고서가 삭제되었습니다");
       router.push("/reports");

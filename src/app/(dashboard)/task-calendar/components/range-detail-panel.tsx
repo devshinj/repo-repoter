@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { api } from "@/lib/api-url";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
     setLoading(true);
     const params = new URLSearchParams({ since: rangeStart, until: rangeEnd });
     if (repoIds) params.set("repoIds", repoIds);
-    fetch(`/api/repos/commit-calendar/range?${params}`)
+    fetch(api(`/repos/commit-calendar/range?${params}`))
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setData(d); })
       .catch(() => setData([]))
@@ -96,7 +97,7 @@ export function RangeDetailPanel({ rangeStart, rangeEnd, repoIds }: RangeDetailP
 
     setGeneratingRepoId(repo.repoId);
     try {
-      const res = await fetch("/api/reports/generate", {
+      const res = await fetch(api("/reports/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

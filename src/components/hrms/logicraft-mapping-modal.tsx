@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -37,7 +38,7 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
     if (!open) return;
     setError(null);
 
-    fetch("/api/logicraft/key")
+    fetch(api("/logicraft/key"))
       .then((r) => r.json())
       .then((data) => {
         if (data.registered) {
@@ -69,12 +70,12 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
     setLoading(true);
     try {
       const [lcRes, hrmsRes] = await Promise.all([
-        fetch("/api/logicraft/verify", {
+        fetch(api("/logicraft/verify"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ apiKey: "__stored__" }),
         }).then((r) => r.json()).catch(() => ({ projects: [] })),
-        fetch("/api/hrms/projects").then((r) => r.json()),
+        fetch(api("/hrms/projects")).then((r) => r.json()),
       ]);
 
       setLogicraftProjects(Array.isArray(lcRes.projects) ? lcRes.projects : []);
@@ -96,7 +97,7 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
     setError(null);
 
     try {
-      const saveRes = await fetch("/api/logicraft/key", {
+      const saveRes = await fetch(api("/logicraft/key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey }),
@@ -108,7 +109,7 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
         return;
       }
 
-      const verifyRes = await fetch("/api/logicraft/verify", {
+      const verifyRes = await fetch(api("/logicraft/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey }),
@@ -123,7 +124,7 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
       setLogicraftProjects(verifyData.projects ?? []);
       setKeyRegistered(true);
 
-      const hrmsRes = await fetch("/api/hrms/projects").then((r) => r.json());
+      const hrmsRes = await fetch(api("/hrms/projects")).then((r) => r.json());
       setHrmsProjects(Array.isArray(hrmsRes) ? hrmsRes : []);
 
       setStep("select");
@@ -159,7 +160,7 @@ export function LogicraftMappingModal({ open, onClose, onSave, editing }: Logicr
     };
 
     try {
-      const url = editing ? `/api/logicraft/mappings/${editing.id}` : "/api/logicraft/mappings";
+      const url = editing ? api(`/logicraft/mappings/${editing.id}`) : api("/logicraft/mappings");
       const method = editing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,

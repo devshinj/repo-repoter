@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,7 +29,7 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const res = await fetch("/api/register", {
+    const res = await fetch(api("/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
@@ -50,7 +53,7 @@ export default function RegisterPage() {
       setError("가입은 완료되었으나 자동 로그인에 실패했습니다. 로그인 페이지에서 다시 시도하세요.");
       setLoading(false);
     } else {
-      window.location.href = "/";
+      window.location.href = `${basePath}/`;
     }
   };
 

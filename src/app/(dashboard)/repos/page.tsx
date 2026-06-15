@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { api } from "@/lib/api-url";
 import { repoColor, stringColor, oklch } from "@/lib/color-hash";
 import { DotIdenticon } from "@/components/data-display/dot-identicon";
 import { LanguageBadge } from "@/components/data-display/language-badge";
@@ -164,7 +165,7 @@ export default function ReposPage() {
   const [registering, setRegistering] = useState(false);
 
   const fetchRepos = () => {
-    return fetch("/api/repos").then((r) => r.json()).then((data) => {
+    return fetch(api("/repos")).then((r) => r.json()).then((data) => {
       if (Array.isArray(data)) setRepos(data);
     });
   };
@@ -180,7 +181,7 @@ export default function ReposPage() {
   }, [repos]);
 
   const fetchCredentials = () => {
-    fetch("/api/credentials").then(r => r.json()).then(data => {
+    fetch(api("/credentials")).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         setCredentials(data.filter((c: any) => c.provider === "git" && c.metadata?.type));
       }
@@ -194,7 +195,7 @@ export default function ReposPage() {
     setRemoteRepos([]);
     setSelectedRepos(new Set());
     try {
-      const res = await fetch(`/api/git-providers/repos?credentialId=${credId}`);
+      const res = await fetch(api(`/git-providers/repos?credentialId=${credId}`));
       if (res.ok) {
         const data = await res.json();
         setRemoteRepos(data);
@@ -233,7 +234,7 @@ export default function ReposPage() {
         .filter(r => selectedRepos.has(r.cloneUrl))
         .map(r => ({ cloneUrl: r.cloneUrl, branch: r.defaultBranch }));
 
-      const res = await fetch("/api/repos", {
+      const res = await fetch(api("/repos"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repositories, credentialId: selectedCredId }),
@@ -263,7 +264,7 @@ export default function ReposPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/repos", {
+      const res = await fetch(api("/repos"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cloneUrl, branch }),
@@ -292,7 +293,7 @@ export default function ReposPage() {
 
   const handleDeleteConfirm = async () => {
     if (deleteTarget === null) return;
-    const res = await fetch(`/api/repos?id=${deleteTarget}`, { method: "DELETE" });
+    const res = await fetch(api(`/repos?id=${deleteTarget}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("저장소가 삭제되었습니다");
       fetchRepos();
@@ -304,7 +305,7 @@ export default function ReposPage() {
     e.stopPropagation();
     setSyncing(id);
     try {
-      const res = await fetch(`/api/repos/${id}/sync`, { method: "POST" });
+      const res = await fetch(api(`/repos/${id}/sync`), { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         toast.success(`동기화 완료: ${data.commitsProcessed}개 커밋, ${data.tasksCreated}개 태스크`);
@@ -325,7 +326,7 @@ export default function ReposPage() {
   const labelInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveLabel = async (id: number, label: string) => {
-    const res = await fetch("/api/repos", {
+    const res = await fetch(api("/repos"), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, label }),
@@ -358,7 +359,7 @@ export default function ReposPage() {
     const prevEnabled = nextActive ? 0 : 1;
     // optimistic update
     setRepos(prev => prev.map(r => r.id === id ? { ...r, auto_report_enabled: nextActive ? 1 : 0 } : r));
-    const res = await fetch("/api/repos", {
+    const res = await fetch(api("/repos"), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, autoReportEnabled: nextActive }),
@@ -373,7 +374,7 @@ export default function ReposPage() {
   };
 
   const handleSaveAuthors = async (id: number, authors: string[]) => {
-    const res = await fetch("/api/repos", {
+    const res = await fetch(api("/repos"), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, gitAuthor: authors.join(", ") }),
@@ -543,7 +544,7 @@ export default function ReposPage() {
                       size="sm"
                       className="h-8 w-8 p-0"
                       onClick={(e) => handleSync(e, repo.id)}
-                      disabled={syncing === repo.id || repo.sync_status !== "ready"}
+                      disabled={syncing === repo.id || (repo.sync_status !== "ready" && repo.sync_status !== "error")}
                       title="지금 동기화"
                     >
                       <RefreshCw className={`h-4 w-4 ${syncing === repo.id ? "animate-spin" : ""}`} />

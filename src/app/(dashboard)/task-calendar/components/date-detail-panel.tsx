@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { api } from "@/lib/api-url";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     setExpandedBranches(new Set());
     setLoading(true);
     const params = repoIds ? `?repoIds=${repoIds}` : "";
-    fetch(`/api/repos/commit-calendar/${selectedDate}${params}`)
+    fetch(api(`/repos/commit-calendar/${selectedDate}${params}`))
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setDateDetail(data);
@@ -74,7 +75,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     setReportDate(selectedDate);
 
     try {
-      const res = await fetch("/api/reports/generate", {
+      const res = await fetch(api("/reports/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoId: repo.repoId, date: selectedDate }),
@@ -123,7 +124,7 @@ export function DateDetailPanel({ selectedDate, commitCount, repoIds }: DateDeta
     if (!reportContent.trim() || !reportRepo) return;
     setReportSaving(true);
     try {
-      const res = await fetch("/api/reports", {
+      const res = await fetch(api("/reports"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

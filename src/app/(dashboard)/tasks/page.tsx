@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/data-display/empty-state";
 import { Spinner } from "@/components/ui/spinner";
+import { api } from "@/lib/api-url";
 
 function extractProperty(page: any, name: string): string {
   const prop = page.properties[name];
@@ -35,7 +36,7 @@ export default function TasksPage() {
     const params = new URLSearchParams();
     if (dateFilter) params.set("date", dateFilter);
 
-    fetch(`/api/tasks?${params}`)
+    fetch(api(`/tasks?${params}`))
       .then((r) => r.json())
       .then(setTasks)
       .finally(() => setLoading(false));

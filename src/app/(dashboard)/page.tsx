@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { repoColor } from "@/lib/color-hash";
+import { api } from "@/lib/api-url";
 import { ContributionHeatmap } from "@/components/data-display/contribution-heatmap";
 import { DotIdenticon } from "@/components/data-display/dot-identicon";
 import { LanguageBadge } from "@/components/data-display/language-badge";
@@ -139,10 +140,10 @@ export default function DashboardPage() {
 
   const refreshData = useCallback(() => {
     return Promise.all([
-      fetch("/api/repos").then((r) => r.json()).then(setRepos),
-      fetch("/api/cron").then((r) => r.json()).then(setSchedulerStatus),
-      fetch("/api/commits/heatmap?months=6").then((r) => r.json()).then((d) => setHeatmapData(d.data || {})),
-      fetch("/api/dashboard/stats").then((r) => r.json()).then(setStats),
+      fetch(api("/repos")).then((r) => r.json()).then(setRepos),
+      fetch(api("/cron")).then((r) => r.json()).then(setSchedulerStatus),
+      fetch(api("/commits/heatmap?months=6")).then((r) => r.json()).then((d) => setHeatmapData(d.data || {})),
+      fetch(api("/dashboard/stats")).then((r) => r.json()).then(setStats),
     ]);
   }, []);
 
@@ -182,7 +183,7 @@ export default function DashboardPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
+      const res = await fetch(api("/sync"), { method: "POST" });
       if (res.ok) {
         toast.success("동기화 완료");
         refreshData();
@@ -200,7 +201,7 @@ export default function DashboardPage() {
   const handleRepoSync = async (repoId: number) => {
     setSyncingRepoIds((prev) => new Set(prev).add(repoId));
     try {
-      const res = await fetch(`/api/repos/${repoId}/sync`, { method: "POST" });
+      const res = await fetch(api(`/repos/${repoId}/sync`), { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         toast.success(`동기화 완료 — ${data.commitsProcessed}건 처리`);

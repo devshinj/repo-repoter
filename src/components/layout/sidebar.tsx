@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { stringColor } from "@/lib/color-hash";
 import { LayoutDashboard, GitFork, CalendarDays, FileText, Settings, LogOut, Briefcase } from "lucide-react";
 import { signOut } from "next-auth/react";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Logo } from "@/components/layout/logo";
@@ -69,7 +71,7 @@ export function Sidebar({ user }: SidebarProps) {
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-muted-foreground"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => signOut({ callbackUrl: `${basePath}/login` })}
         >
           <LogOut className="h-4 w-4" />
           로그아웃

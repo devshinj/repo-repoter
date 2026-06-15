@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { projectColor, oklch } from "@/lib/color-hash";
+import { api } from "@/lib/api-url";
 
 function getDaysInMonth(year: number, month: number): Date[] {
   const days: Date[] = [];
@@ -41,7 +42,7 @@ export default function CalendarPage() {
   const firstDayOfWeek = new Date(year, month, 1).getDay();
 
   useEffect(() => {
-    fetch("/api/tasks").then((r) => r.json()).then(setTasks);
+    fetch(api("/tasks")).then((r) => r.json()).then(setTasks);
   }, [year, month]);
 
   const tasksByDate = new Map<string, any[]>();

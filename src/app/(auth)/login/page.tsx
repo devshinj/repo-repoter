@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,12 +33,12 @@ export default function LoginPage() {
       setError("이메일 또는 비밀번호가 올바르지 않습니다");
       setLoading(false);
     } else {
-      window.location.href = "/";
+      window.location.href = `${basePath}/`;
     }
   };
 
   const handleHrmsLogin = () => {
-    signIn("hrms", { callbackUrl: "/" });
+    signIn("hrms", { callbackUrl: `${basePath}/` });
   };
 
   const features = [

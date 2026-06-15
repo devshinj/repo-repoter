@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { Header } from "@/components/layout/header";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, GitCommit, CalendarDays } from "lucide-react";
 import { CalendarGrid, formatMonth } from "./components/calendar-grid";
@@ -41,7 +42,7 @@ export default function TaskCalendarPage() {
 
   // 저장소 목록 로드
   useEffect(() => {
-    fetch("/api/repos")
+    fetch(api("/repos"))
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -87,7 +88,7 @@ export default function TaskCalendarPage() {
     setLoading(true);
     const params = new URLSearchParams({ since: calendarDateRange.since, until: calendarDateRange.until });
     if (repoIdsParam) params.set("repoIds", repoIdsParam);
-    fetch(`/api/repos/commit-calendar?${params}`)
+    fetch(api(`/repos/commit-calendar?${params}`))
       .then((r) => r.json())
       .then((data) => {
         if (typeof data === "object" && !data.error) setCommitCounts(data);
