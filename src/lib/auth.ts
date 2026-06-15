@@ -47,7 +47,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           display: "popup",
         },
       },
-      token: `${process.env.AUTH_HRMS_ISSUER}/api/oauth/token`,
+      token: {
+        url: `${process.env.AUTH_HRMS_ISSUER}/api/oauth/token`,
+      },
       userinfo: `${process.env.AUTH_HRMS_ISSUER}/api/oauth/userinfo`,
       profile(profile) {
         return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -37,9 +37,25 @@ export default function LoginPage() {
     }
   };
 
+  const popupRef = useRef<Window | null>(null);
+
   const handleHrmsLogin = () => {
-    signIn("hrms", { callbackUrl: `${basePath}/` });
+    popupRef.current = window.open(
+      `${basePath}/hrms-popup`,
+      "hrms_oauth",
+      "width=480,height=600,scrollbars=yes",
+    );
   };
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "hrms-oauth-complete") return;
+      window.location.href = `${basePath}/`;
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   const features = [
     { icon: GitBranch, label: "커밋 자동 수집" },
