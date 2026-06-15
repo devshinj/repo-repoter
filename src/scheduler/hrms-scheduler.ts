@@ -50,7 +50,17 @@ async function executeRegistration(mappingId: number): Promise<void> {
   }
 
   const repoIds = mapping.repos.map((r: any) => r.id);
-  const cacheCommits = getCommitsByDateRange(db, repoIds, date, date) as any[];
+  const allAuthors: string[] = [];
+  for (const repo of mapping.repos) {
+    if (repo.git_author) {
+      const authors = repo.git_author.split(",").map((a: string) => a.trim()).filter(Boolean);
+      allAuthors.push(...authors);
+    }
+  }
+  const cacheCommits = getCommitsByDateRange(
+    db, repoIds, date, date,
+    allAuthors.length > 0 ? allAuthors : undefined,
+  ) as any[];
 
   if (cacheCommits.length === 0) {
     console.log(`[HrmsScheduler] mapping=${mappingId}: no commits on ${date}, skipping`);

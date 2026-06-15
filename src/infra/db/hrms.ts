@@ -113,7 +113,7 @@ export function getMappingsByUser(db: Database.Database, userId: string) {
   const mappingIds = mappings.map((m: any) => m.id);
   const placeholders = mappingIds.map(() => "?").join(",");
   const allRepos = db.prepare(
-    `SELECT mr.mapping_id, r.id, r.owner, r.repo, r.label
+    `SELECT mr.mapping_id, r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
      FROM hrms_mapping_repos mr
      JOIN repositories r ON r.id = mr.repository_id
      WHERE mr.mapping_id IN (${placeholders})`
@@ -123,7 +123,7 @@ export function getMappingsByUser(db: Database.Database, userId: string) {
   const reposByMapping = new Map<number, any[]>();
   for (const r of allRepos) {
     const list = reposByMapping.get(r.mapping_id) ?? [];
-    list.push({ id: r.id, owner: r.owner, repo: r.repo, label: r.label });
+    list.push({ id: r.id, owner: r.owner, repo: r.repo, branch: r.branch, label: r.label, git_author: r.git_author, clone_url: r.clone_url, credential_id: r.credential_id });
     reposByMapping.set(r.mapping_id, list);
   }
 
@@ -141,7 +141,7 @@ export function getMappingById(db: Database.Database, id: number) {
   if (!mapping) return null;
 
   const repos = db.prepare(
-    `SELECT r.id, r.owner, r.repo, r.label
+    `SELECT r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
      FROM hrms_mapping_repos mr
      JOIN repositories r ON r.id = mr.repository_id
      WHERE mr.mapping_id = ?`
@@ -191,15 +191,36 @@ interface InsertTaskLogInput {
   targetDate: string;
   title: string;
   description: string;
-  status: "success" | "error";
+  status: "success" | "error" | "in_progress" | "skipped";
   errorMessage: string | null;
 }
 
-export function insertTaskLog(db: Database.Database, input: InsertTaskLogInput): void {
-  db.prepare(
+export function insertTaskLog(db: Database.Database, input: InsertTaskLogInput): number {
+  const result = db.prepare(
     `INSERT INTO hrms_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage);
+  return result.lastInsertRowid as number;
+}
+
+/** in_progress → success/error 업데이트 */
+export function updateTaskLog(
+  db: Database.Database,
+  logId: number,
+  update: { status: "success" | "error" | "skipped"; hrmsTaskId?: number; title?: string; description?: string; errorMessage?: string | null },
+): void {
+  db.prepare(
+    `UPDATE hrms_task_logs SET status = ?, hrms_task_id = COALESCE(?, hrms_task_id),
+     title = COALESCE(?, title), description = COALESCE(?, description),
+     error_message = ? WHERE id = ?`
+  ).run(update.status, update.hrmsTaskId ?? null, update.title ?? null, update.description ?? null, update.errorMessage ?? null, logId);
+}
+
+/** 특정 매핑의 in_progress 로그 조회 */
+export function getInProgressLog(db: Database.Database, mappingId: number) {
+  return db.prepare(
+    "SELECT id, target_date FROM hrms_task_logs WHERE mapping_id = ? AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1"
+  ).get(mappingId) as { id: number; target_date: string } | undefined ?? null;
 }
 
 export function getTaskLogs(db: Database.Database, userId: string, limit = 50) {

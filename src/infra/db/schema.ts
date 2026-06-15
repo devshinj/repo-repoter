@@ -134,7 +134,7 @@ export function createTables(db: Database.Database): void {
       target_date TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+      status TEXT NOT NULL CHECK(status IN ('success', 'error', 'in_progress', 'skipped')),
       error_message TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -364,5 +364,52 @@ export function migrateSchema(db: Database.Database): void {
   if (oldIdx) {
     db.exec("DROP INDEX idx_hrms_task_logs_mapping_date");
     db.exec("CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status ON hrms_task_logs(mapping_id, target_date, status)");
+  }
+
+  // hrms_task_logs: in_progress 상태 추가를 위한 CHECK 제약 마이그레이션
+  const taskLogSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='hrms_task_logs'"
+  ).get() as { sql: string } | undefined;
+  if (taskLogSql?.sql && !taskLogSql.sql.includes("in_progress")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS hrms_task_logs_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mapping_id INTEGER NOT NULL REFERENCES hrms_project_mappings(id) ON DELETE CASCADE,
+        hrms_task_id INTEGER,
+        target_date TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('success', 'error', 'in_progress', 'skipped')),
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO hrms_task_logs_new SELECT * FROM hrms_task_logs;
+      DROP TABLE hrms_task_logs;
+      ALTER TABLE hrms_task_logs_new RENAME TO hrms_task_logs;
+      CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status
+        ON hrms_task_logs(mapping_id, target_date, status);
+    `);
+  }
+
+  // hrms_task_logs: skipped 상태 추가를 위한 CHECK 제약 마이그레이션
+  if (taskLogSql?.sql && taskLogSql.sql.includes("in_progress") && !taskLogSql.sql.includes("skipped")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS hrms_task_logs_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mapping_id INTEGER NOT NULL REFERENCES hrms_project_mappings(id) ON DELETE CASCADE,
+        hrms_task_id INTEGER,
+        target_date TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('success', 'error', 'in_progress', 'skipped')),
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO hrms_task_logs_new SELECT * FROM hrms_task_logs;
+      DROP TABLE hrms_task_logs;
+      ALTER TABLE hrms_task_logs_new RENAME TO hrms_task_logs;
+      CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status
+        ON hrms_task_logs(mapping_id, target_date, status);
+    `);
   }
 }

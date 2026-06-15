@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -49,25 +50,35 @@ export default function HrmsPage() {
   const [lcModalOpen, setLcModalOpen] = useState(false);
   const [lcEditing, setLcEditing] = useState<any>(null);
   const [lcDuplicateDialog, setLcDuplicateDialog] = useState<{ mappingId: number; targetDate: string } | null>(null);
+  const [activeJobs, setActiveJobs] = useState<Map<number, number>>(new Map()); // mappingId → jobId
 
   const loadData = useCallback(async () => {
     try {
-      const keyRes = await fetch("/api/hrms/key");
+      const keyRes = await fetch(api("/hrms/key"));
       const keyData = await keyRes.json();
       setKeyInfo(keyData);
 
       if (keyData.registered) {
-        const [mappingsRes, logsRes, projectsRes, lcMappingsRes] = await Promise.all([
-          fetch("/api/hrms/mappings"),
-          fetch("/api/hrms/register/history?limit=10"),
-          fetch("/api/hrms/projects-enriched"),
-          fetch("/api/logicraft/mappings"),
+        const [mappingsRes, logsRes, projectsRes, lcMappingsRes, activeRes] = await Promise.all([
+          fetch(api("/hrms/mappings")),
+          fetch(api("/hrms/register/history?limit=10")),
+          fetch(api("/hrms/projects-enriched")),
+          fetch(api("/logicraft/mappings")),
+          fetch(api("/hrms/register/active")),
         ]);
         setMappings(await mappingsRes.json());
         setLogs(await logsRes.json());
         const projData = await projectsRes.json();
         setProjects(Array.isArray(projData) ? projData : []);
         setLcMappings(await lcMappingsRes.json().catch(() => []));
+
+        // 진행 중인 작업 매핑
+        const activeData = await activeRes.json().catch(() => []);
+        const jobMap = new Map<number, number>();
+        for (const job of activeData) {
+          jobMap.set(job.mappingId, job.logId);
+        }
+        setActiveJobs(jobMap);
       }
     } finally {
       setLoading(false);
@@ -79,7 +90,7 @@ export default function HrmsPage() {
   }, [loadData]);
 
   async function handleRegister(mappingId: number, targetDate?: string, force?: boolean) {
-    const res = await fetch("/api/hrms/register", {
+    const res = await fetch(api("/hrms/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mappingId, targetDate, force }),
@@ -87,20 +98,18 @@ export default function HrmsPage() {
     const data = await res.json();
     if (!res.ok) {
       toast.error(data.error);
-    } else if (data.duplicate) {
-      setDuplicateDialog({ mappingId, targetDate: data.date });
-    } else if (data.skipped) {
-      toast.info("해당 날짜에 커밋이 없어 등록을 건너뛰었습니다.");
-    } else if (data.action === "updated") {
-      toast.success(`기존 업무 업데이트 완료 (HRMS #${data.hrmsTaskId})`);
-    } else {
-      toast.success(`업무 등록 완료 (HRMS #${data.hrmsTaskId})`);
+      return data;
     }
-    loadData();
+    if (data.duplicate) {
+      setDuplicateDialog({ mappingId, targetDate: data.date });
+      return data;
+    }
+    // jobId가 있으면 SSE가 처리 — toast는 MappingCard의 SSE 콜백에서 표시
+    return data;
   }
 
   async function handleDelete(mappingId: number) {
-    const res = await fetch(`/api/hrms/mappings/${mappingId}`, { method: "DELETE" });
+    const res = await fetch(api(`/hrms/mappings/${mappingId}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("매핑이 삭제되었습니다.");
       loadData();
@@ -108,7 +117,7 @@ export default function HrmsPage() {
   }
 
   async function handleLcRegister(mappingId: number, targetDate?: string, force?: boolean) {
-    const res = await fetch("/api/logicraft/register", {
+    const res = await fetch(api("/logicraft/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mappingId, targetDate, force }),
@@ -129,7 +138,7 @@ export default function HrmsPage() {
   }
 
   async function handleLcDelete(mappingId: number) {
-    const res = await fetch(`/api/logicraft/mappings/${mappingId}`, { method: "DELETE" });
+    const res = await fetch(api(`/logicraft/mappings/${mappingId}`), { method: "DELETE" });
     if (res.ok) {
       toast.success("LogiCraft 매핑이 삭제되었습니다.");
       loadData();
@@ -139,7 +148,7 @@ export default function HrmsPage() {
   async function handleDisconnect() {
     setDisconnecting(true);
     try {
-      await fetch("/api/hrms/key", { method: "DELETE" });
+      await fetch(api("/hrms/key"), { method: "DELETE" });
       setKeyInfo(null);
       setMappings([]);
       setLogs([]);
@@ -156,7 +165,7 @@ export default function HrmsPage() {
     if (!newApiKey.trim()) return;
     setChangingKey(true);
     try {
-      const res = await fetch("/api/hrms/key", {
+      const res = await fetch(api("/hrms/key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: newApiKey.trim() }),
@@ -251,9 +260,11 @@ export default function HrmsPage() {
                     mapping={m}
                     projectStatus={proj?.status}
                     statusLabel={proj?.statusLabel}
+                    activeJobId={activeJobs.get(m.id)}
                     onRegister={handleRegister}
                     onEdit={(mapping) => { setEditing(mapping); setModalOpen(true); }}
                     onDelete={handleDelete}
+                    onComplete={loadData}
                   />
                 );
               })}
@@ -417,9 +428,12 @@ export default function HrmsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
+            <AlertDialogAction onClick={async () => {
               if (duplicateDialog) {
-                handleRegister(duplicateDialog.mappingId, duplicateDialog.targetDate, true);
+                const data = await handleRegister(duplicateDialog.mappingId, duplicateDialog.targetDate, true);
+                if (data?.jobId) {
+                  setActiveJobs(prev => new Map(prev).set(duplicateDialog.mappingId, data.jobId));
+                }
               }
               setDuplicateDialog(null);
             }}>등록</AlertDialogAction>

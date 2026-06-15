@@ -25,6 +25,7 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
         const logKey = `${log.source ?? "git"}-${log.id}`;
         const isExpanded = expandedKey === logKey;
         const isSuccess = log.status === "success";
+        const isSkipped = log.status === "skipped";
         const isLogicraft = log.source === "logicraft";
 
         return (
@@ -35,8 +36,11 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
                 onClick={() => setExpandedKey(isExpanded ? null : logKey)}
               >
-                <Badge variant={isSuccess ? "default" : "destructive"} className="shrink-0">
-                  {isSuccess ? "성공" : "실패"}
+                <Badge
+                  variant={isSuccess ? "default" : isSkipped ? "secondary" : "destructive"}
+                  className="shrink-0"
+                >
+                  {isSuccess ? "성공" : isSkipped ? "건너뜀" : "실패"}
                 </Badge>
                 {isLogicraft
                   ? <Blocks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -44,7 +48,7 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
                 }
                 <span className="text-xs text-muted-foreground shrink-0">{log.target_date}</span>
                 <span className="text-sm font-medium truncate flex-1">
-                  {log.hrms_project_name} - {isSuccess ? log.title : log.error_message}
+                  {log.hrms_project_name} - {isSuccess ? log.title : isSkipped ? "커밋 없음" : log.error_message}
                 </span>
                 {isSuccess && log.hrms_task_id && (
                   <a
@@ -69,6 +73,8 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
                       <p className="text-sm font-medium">{log.title}</p>
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{log.description}</pre>
                     </div>
+                  ) : isSkipped ? (
+                    <p className="pt-3 text-sm text-muted-foreground">해당 날짜에 커밋이 없어 등록을 건너뛰었습니다.</p>
                   ) : (
                     <p className="pt-3 text-sm text-destructive">{log.error_message}</p>
                   )}

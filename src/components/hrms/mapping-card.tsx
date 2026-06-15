@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { api } from "@/lib/api-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,15 +25,21 @@ import {
   Clock,
   Zap,
   Hand,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface MappingCardProps {
   mapping: any;
   projectStatus?: string;
   statusLabel?: string;
-  onRegister: (mappingId: number, targetDate?: string) => Promise<void>;
+  /** 페이지 진입 시 이미 진행 중이던 작업의 jobId */
+  activeJobId?: number;
+  onRegister: (mappingId: number, targetDate?: string, force?: boolean) => Promise<any>;
   onEdit: (mapping: any) => void;
   onDelete: (mappingId: number) => Promise<void>;
+  onComplete?: () => void;
 }
 
 function getDateString(offset: number): string {
@@ -47,7 +54,6 @@ function getDateLabel(offset: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-// 캐러셀과 동일한 프로젝트 상태 기반 테마
 function getStatusTheme(status: string) {
   switch (status) {
     case "PROJ_PROGRESS":
@@ -65,22 +71,62 @@ function getStatusTheme(status: string) {
   }
 }
 
-export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, onEdit, onDelete }: MappingCardProps) {
-  const [registering, setRegistering] = useState(false);
-  const [progressStep, setProgressStep] = useState<string | null>(null);
+function useSSEStream(jobId: number | null, onEvent: (event: any) => void) {
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    const es = new EventSource(api(`/hrms/register/stream?jobId=${jobId}`));
+    eventSourceRef.current = es;
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        onEventRef.current(data);
+      } catch { /* ignore parse errors */ }
+    };
+
+    es.onerror = () => {
+      es.close();
+    };
+
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, [jobId]);
+}
+
+export function MappingCard({ mapping, projectStatus, statusLabel, activeJobId, onRegister, onEdit, onDelete, onComplete }: MappingCardProps) {
+  const [registering, setRegistering] = useState(!!activeJobId);
+  const [progressStep, setProgressStep] = useState<string | null>(activeJobId ? "진행 중인 작업에 재연결 중..." : null);
+  const [progressIcon, setProgressIcon] = useState<"loading" | "done" | "error">("loading");
   const [deleting, setDeleting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+  const [currentJobId, setCurrentJobId] = useState<number | null>(activeJobId ?? null);
 
   const theme = getStatusTheme(projectStatus ?? "");
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // activeJobId prop이 외부에서 변경되면 (예: 중복→force 등록) SSE 재연결
+  useEffect(() => {
+    if (activeJobId && activeJobId !== currentJobId) {
+      setCurrentJobId(activeJobId);
+      setRegistering(true);
+      setProgressStep("등록 진행 중...");
+      setProgressIcon("loading");
+    }
+  }, [activeJobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setLoadingTasks(true);
-    fetch(`/api/hrms/tasks?projectId=${mapping.hrms_project_id}`)
+    fetch(api(`/hrms/tasks?projectId=${mapping.hrms_project_id}`))
       .then(r => r.ok ? r.json() : [])
       .then(tasks => {
         const sorted = (Array.isArray(tasks) ? tasks : [])
@@ -92,49 +138,60 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
       .finally(() => setLoadingTasks(false));
   }, [mapping.hrms_project_id]);
 
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
+  const handleSSEEvent = useCallback((event: any) => {
+    setProgressStep(event.message);
+
+    if (event.step === "done") {
+      setProgressIcon("done");
+      if (event.result) {
+        const { hrmsTaskId, action } = event.result;
+        toast.success(
+          action === "updated"
+            ? `기존 업무 업데이트 완료 (HRMS #${hrmsTaskId})`
+            : `업무 등록 완료 (HRMS #${hrmsTaskId})`
+        );
+      }
+      setTimeout(() => {
+        setRegistering(false);
+        setProgressStep(null);
+        setProgressIcon("loading");
+        setCurrentJobId(null);
+        onComplete?.();
+      }, 2000);
+    } else if (event.step === "error") {
+      setProgressIcon("error");
+      toast.error(event.error || event.message);
+      setTimeout(() => {
+        setRegistering(false);
+        setProgressStep(null);
+        setProgressIcon("loading");
+        setCurrentJobId(null);
+        onComplete?.();
+      }, 3000);
+    }
+  }, [onComplete]);
+
+  useSSEStream(currentJobId, handleSSEEvent);
 
   async function handleRegister(targetDate?: string) {
     setRegistering(true);
-    const repoCount = mapping.repos?.length ?? 1;
-
-    // 시뮬레이션 프로그레스: 동기화 → 생성 → 등록
-    const steps: string[] = [];
-    for (let i = 1; i <= repoCount; i++) {
-      steps.push(`저장소 동기화 중... (${i}/${repoCount})`);
-    }
-    steps.push("업무 내용 생성 중...");
-    steps.push("HRMS 등록 중...");
-
-    let stepIndex = 0;
-    setProgressStep(steps[0]);
-    intervalRef.current = setInterval(() => {
-      stepIndex++;
-      if (stepIndex < steps.length) {
-        setProgressStep(steps[stepIndex]);
-        if (stepIndex === steps.length - 1 && intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      }
-    }, 2000);
+    setProgressStep("등록 준비 중...");
+    setProgressIcon("loading");
 
     try {
-      await onRegister(mapping.id, targetDate);
-      setProgressStep(null);
-    } catch {
-      setProgressStep(null);
-    } finally {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      const data = await onRegister(mapping.id, targetDate);
+      if (data?.duplicate || data?.skipped) {
+        // 즉시 완료된 케이스 (중복 또는 스킵)
+        setRegistering(false);
+        setProgressStep(null);
+        return;
       }
+      if (data?.jobId) {
+        setCurrentJobId(data.jobId);
+      }
+    } catch {
       setRegistering(false);
-      setShowDatePicker(false);
+      setProgressStep(null);
     }
   }
 
@@ -151,6 +208,12 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
   const repoNames = mapping.repos
     .map((r: any) => r.label || `${r.owner}/${r.repo}`)
     .join(", ");
+
+  const ProgressIconComponent = progressIcon === "done"
+    ? CheckCircle2
+    : progressIcon === "error"
+      ? XCircle
+      : Loader2;
 
   return (
     <>
@@ -227,8 +290,12 @@ export function MappingCard({ mapping, projectStatus, statusLabel, onRegister, o
 
         {/* 프로그레스 표시 */}
         {registering && progressStep && (
-          <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+          <div className={`flex items-center gap-2 px-1 py-2 text-xs ${
+            progressIcon === "done" ? "text-emerald-600 dark:text-emerald-400" :
+            progressIcon === "error" ? "text-destructive" :
+            "text-muted-foreground"
+          }`}>
+            <ProgressIconComponent className={`h-3.5 w-3.5 flex-shrink-0 ${progressIcon === "loading" ? "animate-spin" : ""}`} />
             <span>{progressStep}</span>
           </div>
         )}
