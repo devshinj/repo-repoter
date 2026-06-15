@@ -80,38 +80,31 @@ export class GiteaProvider implements GitProviderClient {
     if (options?.since) params.set("since", options.since);
     params.set("limit", String(options?.perPage ?? 50));
     if (options?.page) params.set("page", String(options.page));
+    params.set("stat", "true");
     const res = await fetch(`${this.apiBase}/repos/${owner}/${repo}/commits?${params}`, { headers: this.headers });
     if (!res.ok) throw new Error(`Gitea API error: ${res.status}`);
     const data = await res.json();
     return (data as any[]).map((c: any) => ({
       sha: c.sha, message: c.commit?.message || "", author: c.commit?.author?.name || "unknown",
       date: c.commit?.author?.date || c.created || new Date().toISOString(),
-      additions: 0, deletions: 0, filesChanged: [],
+      additions: c.stats?.additions ?? 0,
+      deletions: c.stats?.deletions ?? 0,
+      filesChanged: Array.isArray(c.files) ? c.files.map((f: any) => f.filename).filter(Boolean) : [],
+      statsLoaded: true,
     }));
   }
 
   async getCommitDetail(owner: string, repo: string, sha: string): Promise<ApiCommit> {
-    // Gitea: /repos/{owner}/{repo}/git/commits/{sha} for stats, /commits/{sha} for files
     const res = await fetch(`${this.apiBase}/repos/${owner}/${repo}/git/commits/${sha}`, { headers: this.headers });
     if (!res.ok) throw new Error(`Gitea API error: ${res.status}`);
     const data = await res.json();
-    const diffRes = await fetch(`${this.apiBase}/repos/${owner}/${repo}/commits/${sha}`, { headers: this.headers });
-    let files: string[] = [];
-    let additions = data.stats?.additions ?? 0;
-    let deletions = data.stats?.deletions ?? 0;
-    if (diffRes.ok) {
-      const diffData = await diffRes.json();
-      if (Array.isArray(diffData.files)) {
-        files = diffData.files.map((f: any) => f.filename);
-        additions = diffData.stats?.total_additions ?? additions;
-        deletions = diffData.stats?.total_deletions ?? deletions;
-      }
-    }
     return {
       sha: data.sha, message: data.message || data.commit?.message || "",
       author: data.author?.login || data.commit?.author?.name || "unknown",
       date: data.created || data.commit?.author?.date || new Date().toISOString(),
-      additions, deletions, filesChanged: files,
+      additions: data.stats?.additions ?? 0,
+      deletions: data.stats?.deletions ?? 0,
+      filesChanged: [],
     };
   }
 

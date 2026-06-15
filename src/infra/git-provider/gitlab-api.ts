@@ -78,13 +78,17 @@ export class GitLabProvider implements GitProviderClient {
     if (options?.since) params.set("since", options.since);
     params.set("per_page", String(options?.perPage ?? 100));
     if (options?.page) params.set("page", String(options.page));
+    params.set("with_stats", "true");
     const res = await fetch(`${this.apiBase}/projects/${projectId}/repository/commits?${params}`, { headers: this.headers });
     if (!res.ok) throw new Error(`GitLab API error: ${res.status}`);
     const data = await res.json();
     return (data as any[]).map((c: any) => ({
       sha: c.id, message: c.message || "", author: c.author_name || "unknown",
       date: c.authored_date || c.created_at || new Date().toISOString(),
-      additions: 0, deletions: 0, filesChanged: [],
+      additions: c.stats?.additions ?? 0,
+      deletions: c.stats?.deletions ?? 0,
+      filesChanged: [],
+      statsLoaded: !!(c.stats),
     }));
   }
 

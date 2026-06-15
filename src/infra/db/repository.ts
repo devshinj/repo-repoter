@@ -218,10 +218,14 @@ export function updateSyncStatus(db: Database.Database, id: number, status: stri
   ).run(status, id);
 }
 
-/** 원자적 CAS — sync_status가 ready/error일 때만 syncing으로 전환. 이미 syncing이면 false 반환 */
+/** 원자적 CAS — sync_status가 ready/error/pending일 때만 syncing으로 전환. syncing이 10분 이상 지속된 경우 stale로 판단하여 재진입 허용 */
 export function trySyncStart(db: Database.Database, id: number): boolean {
   const result = db.prepare(
-    "UPDATE repositories SET sync_status = 'syncing', updated_at = datetime('now') WHERE id = ? AND sync_status IN ('ready', 'error')"
+    `UPDATE repositories SET sync_status = 'syncing', updated_at = datetime('now')
+     WHERE id = ? AND (
+       sync_status IN ('ready', 'error', 'pending')
+       OR (sync_status = 'syncing' AND updated_at < datetime('now', '-10 minutes'))
+     )`
   ).run(id);
   return result.changes > 0;
 }
@@ -370,6 +374,30 @@ export function getCommitsByDateRange(
     deletions: r.deletions ?? 0,
     filesChanged: r.files_changed ? JSON.parse(r.files_changed) : [],
   }));
+}
+
+/** 특정 저장소의 마지막 성공 동기화 시각 조회 */
+export function getRepoLastSyncAt(db: Database.Database, repoId: number): string | null {
+  const row = db.prepare(
+    "SELECT MAX(completed_at) as last FROM sync_logs WHERE repository_id = ? AND status = 'success'"
+  ).get(repoId) as { last: string | null } | undefined;
+  return row?.last ?? null;
+}
+
+/** 주어진 SHA 목록 중 이미 캐시된 것들을 반환 */
+export function getCachedShas(db: Database.Database, repoId: number, shas: string[]): Set<string> {
+  const result = new Set<string>();
+  if (shas.length === 0) return result;
+  // 500개씩 배치 처리 (SQLite 파라미터 제한 대응)
+  for (let i = 0; i < shas.length; i += 500) {
+    const batch = shas.slice(i, i + 500);
+    const placeholders = batch.map(() => "?").join(",");
+    const rows = db.prepare(
+      `SELECT sha FROM commit_cache WHERE repository_id = ? AND sha IN (${placeholders})`
+    ).all(repoId, ...batch) as { sha: string }[];
+    for (const row of rows) result.add(row.sha);
+  }
+  return result;
 }
 
 export function getLastSyncCompletedAt(db: Database.Database, userId: string): string | null {

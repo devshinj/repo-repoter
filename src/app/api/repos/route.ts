@@ -11,12 +11,13 @@ import {
   updatePrimaryLanguage,
   updateAutoReportEnabled,
   insertCommitCache,
+  trySyncStart,
   type CacheCommit,
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { parseGitUrl } from "@/infra/git/parse-git-url";
-import { createGitProvider } from "@/infra/git-provider";
+import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
 import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
@@ -44,7 +45,10 @@ async function initialSync(
   meta: GitProviderMeta,
   token: string
 ): Promise<void> {
-  updateSyncStatus(db, repoId, "syncing");
+  if (!trySyncStart(db, repoId)) {
+    console.log(`[Repos] ${owner}/${repo}: already syncing, skipped initial sync`);
+    return;
+  }
   try {
     const provider = createGitProvider(meta, token);
 
@@ -64,22 +68,28 @@ async function initialSync(
     const seenShas = new Set<string>();
     const allCommits: CacheCommit[] = [];
 
+    const maxCommits = 1000;
     for (const br of targetBranches) {
       let page = 1;
       while (true) {
+        if (seenShas.size >= maxCommits) break;
+
         const commits = await provider.listCommits(owner, repo, {
           branch: br, since: sinceDate, perPage: 100, page,
         });
         if (commits.length === 0) break;
 
-        const detailed = await pMap(
-          commits.filter(c => !seenShas.has(c.sha)),
+        const newCommits = commits.filter(c => !seenShas.has(c.sha));
+        const needsDetail = newCommits.filter(c => !c.statsLoaded);
+        const alreadyDetailed = newCommits.filter(c => c.statsLoaded);
+        const fetched = await pMap(
+          needsDetail,
           (c) => provider.getCommitDetail(owner, repo, c.sha),
           detailConcurrency
         );
+        const detailed = [...alreadyDetailed, ...fetched];
 
         for (const c of detailed) {
-          if (seenShas.has(c.sha)) continue;
           seenShas.add(c.sha);
           allCommits.push({
             sha: c.sha, repositoryId: repoId, branch: br,
@@ -173,7 +183,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Git PAT이 등록되지 않았습니다. 설정에서 먼저 등록하세요." }, { status: 400 });
   }
   const token = decrypt(gitCred.credential);
-  const meta: GitProviderMeta = gitCred.metadata ? JSON.parse(gitCred.metadata) : { type: "github", host: "github.com", apiBase: "https://api.github.com" };
+  const meta: GitProviderMeta = gitCred.metadata ? JSON.parse(gitCred.metadata) : inferProviderMeta();
 
   if (Array.isArray(body.repositories)) {
     const results = [];

@@ -8,6 +8,8 @@ export interface ApiCommit {
   additions: number;
   deletions: number;
   filesChanged: string[];
+  /** listCommits에서 stats를 이미 가져왔으면 true — getCommitDetail 호출 스킵 */
+  statsLoaded?: boolean;
 }
 
 export interface ApiBranch {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRepositoryByIdAndUser } from "@/infra/db/repository";
 import { getCredentialById, getCredentialByUserAndProvider } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { createGitProvider } from "@/infra/git-provider";
+import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
 import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const token = decrypt(gitCred.credential);
     const meta: GitProviderMeta = gitCred.metadata
       ? JSON.parse(gitCred.metadata)
-      : { type: "github", host: "github.com", apiBase: "https://api.github.com" };
+      : inferProviderMeta(repo.clone_url);
 
     const provider = createGitProvider(meta, token);
     const branches = await provider.listBranches(repo.owner, repo.repo);

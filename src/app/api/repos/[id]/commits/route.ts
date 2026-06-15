@@ -16,11 +16,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const repo = getRepositoryByIdAndUser(db, Number(id), session.user.id);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
 
-    const rows = db.prepare(
-      `SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
-       FROM commit_cache WHERE repository_id = ?
-       ORDER BY committed_at DESC LIMIT ?`
-    ).all(repo.id, limit) as any[];
+    const branch = searchParams.get("branch");
+
+    let rows: any[];
+    if (branch) {
+      rows = db.prepare(
+        `SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
+         FROM commit_cache WHERE repository_id = ? AND branch = ?
+         ORDER BY committed_at DESC LIMIT ?`
+      ).all(repo.id, branch, limit) as any[];
+    } else {
+      rows = db.prepare(
+        `SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
+         FROM commit_cache WHERE repository_id = ?
+         ORDER BY committed_at DESC LIMIT ?`
+      ).all(repo.id, limit) as any[];
+    }
 
     const commits = rows.map((r: any) => ({
       sha: r.sha,
