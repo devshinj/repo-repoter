@@ -280,15 +280,20 @@ export default function HrmsPage() {
               LogiCraft 매핑
             </h3>
             <div className="grid gap-4">
-              {lcMappings.map((m: any) => (
-                <LogicraftMappingCard
-                  key={m.id}
-                  mapping={m}
-                  onRegister={handleLcRegister}
-                  onEdit={(mapping) => { setLcEditing(mapping); setLcModalOpen(true); }}
-                  onDelete={handleLcDelete}
-                />
-              ))}
+              {lcMappings.map((m: any) => {
+                const proj = projects.find((p: any) => p.id === m.hrms_project_id);
+                return (
+                  <LogicraftMappingCard
+                    key={m.id}
+                    mapping={m}
+                    projectStatus={proj?.status}
+                    statusLabel={proj?.statusLabel}
+                    onRegister={handleLcRegister}
+                    onEdit={(mapping) => { setLcEditing(mapping); setLcModalOpen(true); }}
+                    onDelete={handleLcDelete}
+                  />
+                );
+              })}
             </div>
           </div>
         )}

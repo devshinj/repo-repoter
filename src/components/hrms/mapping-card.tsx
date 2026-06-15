@@ -234,16 +234,16 @@ export function MappingCard({ mapping, projectStatus, statusLabel, activeJobId, 
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                 {statusLabel && (
                   <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${theme.text} ${theme.chipBg}`}>
-                    {statusLabel}
+                    프로젝트: {statusLabel}
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
-                  {mapping.auto_register ? <Zap className="h-2.5 w-2.5" /> : <Hand className="h-2.5 w-2.5" />}
-                  {mapping.auto_register ? `자동 ${mapping.cron_time}` : "수동"}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
                   <GitBranch className="h-2.5 w-2.5" />
                   {mapping.repos.length}개 저장소
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
+                  {mapping.auto_register ? <Zap className="h-2.5 w-2.5" /> : <Hand className="h-2.5 w-2.5" />}
+                  {mapping.auto_register ? `자동 ${mapping.cron_time}` : "수동"}
                 </span>
               </div>
             </div>

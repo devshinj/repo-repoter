@@ -29,6 +29,8 @@ import {
 
 interface LogicraftMappingCardProps {
   mapping: any;
+  projectStatus?: string;
+  statusLabel?: string;
   onRegister: (mappingId: number, targetDate?: string) => Promise<void>;
   onEdit: (mapping: any) => void;
   onDelete: (mappingId: number) => Promise<void>;
@@ -46,26 +48,39 @@ function getDateLabel(offset: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function getStatusTheme(status: string) {
+  switch (status) {
+    case "PROJ_PROGRESS":
+      return { text: "text-emerald-600 dark:text-emerald-400", chipBg: "bg-emerald-500/10 dark:bg-emerald-500/20" };
+    case "PROJ_CONTRACT":
+      return { text: "text-cyan-600 dark:text-cyan-400", chipBg: "bg-cyan-500/10 dark:bg-cyan-500/20" };
+    case "PROJ_PROPOSAL":
+      return { text: "text-violet-600 dark:text-violet-400", chipBg: "bg-violet-500/10 dark:bg-violet-500/20" };
+    case "PROJ_COMPLETE":
+      return { text: "text-slate-500 dark:text-slate-400", chipBg: "bg-slate-500/10 dark:bg-slate-500/20" };
+    case "PROJ_HOLD":
+      return { text: "text-amber-600 dark:text-amber-400", chipBg: "bg-amber-500/10 dark:bg-amber-500/20" };
+    default:
+      return { text: "text-gray-500", chipBg: "bg-gray-500/10 dark:bg-gray-500/20" };
+  }
+}
+
 function getModeTheme(auto: boolean) {
   if (auto) {
     return {
       gradient: "from-violet-500/10 to-purple-500/5",
       border: "border-violet-500/30",
       dot: "bg-violet-500",
-      text: "text-violet-600 dark:text-violet-400",
-      chipBg: "bg-violet-500/10 dark:bg-violet-500/20",
     };
   }
   return {
     gradient: "from-fuchsia-500/10 to-pink-500/5",
     border: "border-fuchsia-500/30",
     dot: "bg-fuchsia-500",
-    text: "text-fuchsia-600 dark:text-fuchsia-400",
-    chipBg: "bg-fuchsia-500/10 dark:bg-fuchsia-500/20",
   };
 }
 
-export function LogicraftMappingCard({ mapping, onRegister, onEdit, onDelete }: LogicraftMappingCardProps) {
+export function LogicraftMappingCard({ mapping, projectStatus, statusLabel, onRegister, onEdit, onDelete }: LogicraftMappingCardProps) {
   const [registering, setRegistering] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -127,13 +142,18 @@ export function LogicraftMappingCard({ mapping, onRegister, onEdit, onDelete }: 
             <div className="min-w-0">
               <h3 className="text-sm font-semibold truncate leading-tight">{mapping.hrms_project_name}</h3>
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${theme.text} ${theme.chipBg}`}>
-                  {mapping.auto_register ? <Zap className="h-2.5 w-2.5" /> : <Hand className="h-2.5 w-2.5" />}
-                  {mapping.auto_register ? `자동 ${mapping.cron_time}` : "수동"}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-violet-700 dark:text-violet-300 bg-violet-500/15 dark:bg-violet-500/25">
+                {statusLabel && (
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${getStatusTheme(projectStatus ?? "").text} ${getStatusTheme(projectStatus ?? "").chipBg}`}>
+                    프로젝트: {statusLabel}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
                   <Blocks className="h-2.5 w-2.5" />
                   LogiCraft
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
+                  {mapping.auto_register ? <Zap className="h-2.5 w-2.5" /> : <Hand className="h-2.5 w-2.5" />}
+                  {mapping.auto_register ? `자동 ${mapping.cron_time}` : "수동"}
                 </span>
               </div>
             </div>
