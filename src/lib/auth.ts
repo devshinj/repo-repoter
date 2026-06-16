@@ -7,6 +7,7 @@ import { getDb } from "@/infra/db/connection";
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  basePath: "/briify/api/auth",
   trustHost: true,
   providers: [
     Credentials({
@@ -66,16 +67,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account, profile }) {
+      const db = getDb();
+
+      if (account?.provider === "credentials") {
+        const dbUser = getUserByEmail(db, user.email || "");
+        if (dbUser && !dbUser.is_active) return false;
+      }
+
       if (account?.provider && account.provider !== "credentials" && profile) {
-        const db = getDb();
         const dbUser = upsertOAuthUser(db, {
           name: user.name || profile.name as string || "",
           email: user.email || profile.email as string || "",
           provider: account.provider,
           providerAccountId: account.providerAccountId,
         });
+        if (!dbUser.is_active) return false;
         user.id = String(dbUser.id);
       }
+
       return true;
     },
     async jwt({ token, user, profile }) {
