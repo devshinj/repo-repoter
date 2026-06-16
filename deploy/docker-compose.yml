@@ -16,6 +16,7 @@ services:
       AUTH_HRMS_ISSUER: ${AUTH_HRMS_ISSUER}
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_URL: ${AUTH_URL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/briify"]
