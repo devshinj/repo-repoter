@@ -5,9 +5,12 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const metadata: Metadata = {
   title: "AutoBriify",
   description: "작업 이력을 자동 수집하고 업무 보고서를 생성합니다",
+  icons: { icon: `${basePath}/icon` },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
