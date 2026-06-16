@@ -27,6 +27,7 @@ export function createTables(db: Database.Database): void {
       password_hash TEXT,
       provider TEXT NOT NULL DEFAULT 'credentials',
       provider_account_id TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -411,5 +412,12 @@ export function migrateSchema(db: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_hrms_task_logs_mapping_date_status
         ON hrms_task_logs(mapping_id, target_date, status);
     `);
+  }
+
+  // users: is_active 컬럼 추가
+  const latestUserColumns = db.prepare("PRAGMA table_info(users)").all() as any[];
+  const latestUserColumnNames = latestUserColumns.map((c: any) => c.name);
+  if (!latestUserColumnNames.includes("is_active")) {
+    db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
   }
 }
