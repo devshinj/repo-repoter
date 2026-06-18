@@ -1,14 +1,32 @@
-// src/infra/gemini/gemini-client.ts
-import { GoogleGenAI } from "@google/genai";
+// src/infra/llm/llm-client.ts
+import OpenAI from "openai";
 import type { CommitRecord, DailyTask, LogicraftItemSummary, LogicraftProposal } from "@/core/types";
 
-let client: GoogleGenAI | null = null;
+let client: OpenAI | null = null;
 
-function getClient(): GoogleGenAI {
+function getClient(): OpenAI {
   if (!client) {
-    client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    client = new OpenAI({
+      apiKey: process.env.QWEN_CODER_KEY!,
+      baseURL: process.env.QWEN_API_URL!,
+    });
   }
   return client;
+}
+
+function getModel(): string {
+  return process.env.QWEN_MODEL ?? "qwen3-coder-next";
+}
+
+export async function generateText(prompt: string): Promise<string> {
+  const openai = getClient();
+  const result = await withRetry(() =>
+    openai.chat.completions.create({
+      model: getModel(),
+      messages: [{ role: "user", content: prompt }],
+    })
+  );
+  return result.choices[0]?.message?.content ?? "";
 }
 
 async function withRetry<T>(
@@ -20,13 +38,13 @@ async function withRetry<T>(
     try {
       return await fn();
     } catch (error: any) {
-      const status = error?.status ?? error?.httpStatusCode;
-      const isRetryable = status === 429 || status === 503 || status >= 500;
+      const status = error?.status ?? error?.statusCode;
+      const isRetryable = status === 429 || status === 503 || (status && status >= 500);
 
       if (!isRetryable || attempt === maxRetries) throw error;
 
       const delay = baseDelayMs * Math.pow(2, attempt);
-      console.warn(`[Gemini] ${status} error, retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
+      console.warn(`[LLM] ${status} error, retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -96,17 +114,8 @@ export async function analyzeCommits(
   project: string,
   date: string
 ): Promise<DailyTask[]> {
-  const genai = getClient();
   const prompt = buildAnalysisPrompt(commits, project, date);
-
-  const result = await withRetry(() =>
-    genai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-    })
-  );
-
-  const text = result.text ?? "";
+  const text = await generateText(prompt);
   const shas = commits.map((c) => c.sha);
   return parseAnalysisResponse(text, project, date, shas);
 }
@@ -115,8 +124,6 @@ export async function analyzeCommitWithDiff(
   commit: CommitRecord,
   diff: string
 ): Promise<string> {
-  const genai = getClient();
-
   const prompt = `다음 Git 커밋의 코드 변경을 분석하여, 이 커밋이 무엇을 했는지 한 줄로 요약해주세요.
 
 커밋 메시지: ${commit.message}
@@ -127,14 +134,8 @@ ${diff.slice(0, 3000)}
 
 한국어로 한 줄 요약만 응답해주세요.`;
 
-  const result = await withRetry(() =>
-    genai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-    })
-  );
-
-  return result.text ?? commit.message;
+  const text = await generateText(prompt);
+  return text || commit.message;
 }
 
 export function buildHrmsTaskPrompt(
@@ -273,17 +274,9 @@ export async function generateHrmsTaskContent(
   repoCommits: Array<{ repoName: string; commits: CommitRecord[] }>,
   estimatedMinutes: number,
 ): Promise<{ title: string; description: string }> {
-  const genai = getClient();
   const prompt = buildHrmsTaskPrompt(projectName, date, repoCommits, estimatedMinutes);
-
-  const result = await withRetry(() =>
-    genai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-    })
-  );
-
-  return parseHrmsTaskResponse(result.text ?? "");
+  const text = await generateText(prompt);
+  return parseHrmsTaskResponse(text);
 }
 
 export function buildLogicraftTaskPrompt(
@@ -352,15 +345,7 @@ export async function generateLogicraftTaskContent(
   items: LogicraftItemSummary[],
   proposals: LogicraftProposal[],
 ): Promise<{ title: string; description: string }> {
-  const genai = getClient();
   const prompt = buildLogicraftTaskPrompt(projectName, logicraftProjectName, date, items, proposals);
-
-  const result = await withRetry(() =>
-    genai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-    }),
-  );
-
-  return parseHrmsTaskResponse(result.text ?? "");
+  const text = await generateText(prompt);
+  return parseHrmsTaskResponse(text);
 }

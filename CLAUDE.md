@@ -20,7 +20,7 @@
 - **UI:** Tailwind CSS + shadcn/ui
 - **Database:** SQLite (better-sqlite3) — 폴링 상태 추적용
 - **Auth:** Auth.js v5 — HRMS OAuth2/OIDC Provider
-- **External APIs:** GitHub REST (@octokit/rest), Gemini (@google/genai)
+- **External APIs:** GitHub REST (@octokit/rest), Qwen LLM via vLLM (openai SDK)
 - **Scheduler:** node-cron — instrumentation.ts에서 초기화
 - **Testing:** Vitest
 
@@ -49,7 +49,7 @@ src/
 │   └── types.ts  # 공유 타입 정의
 ├── infra/        # 외부 서비스 클라이언트 — 교체 가능한 어댑터
 │   ├── github/   # Octokit 래퍼
-│   ├── gemini/   # Gemini API 래퍼
+│   ├── llm/      # LLM API 래퍼 (OpenAI-호환 vLLM)
 │   └── db/       # SQLite 스키마 + 접근 함수
 ├── scheduler/    # 폴링 스케줄러 (core + infra 조합)
 └── lib/          # Auth.js 설정 등 유틸리티
@@ -94,7 +94,7 @@ src/
 
 | Skill | When to Use |
 |-------|-------------|
-| `git-commit-analyzer` | GitHub 커밋 수집, Gemini 분석, 커밋 그룹핑, 태스크 추출 작업 시 |
+| `git-commit-analyzer` | GitHub 커밋 수집, LLM 분석, 커밋 그룹핑, 태스크 추출 작업 시 |
 | `nextjs-polling-service` | 폴링 스케줄러, instrumentation.ts, 파이프라인 오케스트레이션 작업 시 |
 
 ## Key Documents
@@ -109,7 +109,9 @@ src/
 
 ```
 GITHUB_TOKEN          # GitHub Personal Access Token
-GEMINI_API_KEY        # Google Gemini API Key
+QWEN_CODER_KEY        # Qwen LLM API Key
+QWEN_MODEL            # Qwen 모델명 (기본: qwen3-coder-next)
+QWEN_API_URL          # vLLM 서버 URL
 AUTH_HRMS_ID          # HRMS OAuth2 Client ID
 AUTH_HRMS_SECRET      # HRMS OAuth2 Client Secret
 AUTH_HRMS_ISSUER      # HRMS OIDC Issuer URL

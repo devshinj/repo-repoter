@@ -17,7 +17,7 @@ import {
 import { getCommitsByDateRange } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
-import { generateHrmsTaskContent, generateLogicraftTaskContent } from "@/infra/gemini/gemini-client";
+import { generateHrmsTaskContent, generateLogicraftTaskContent } from "@/infra/llm/llm-client";
 import { listItems, listProposals, activityItemTypes } from "@/infra/logicraft/logicraft-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord, LogicraftItemSummary, LogicraftProposal } from "@/core/types";

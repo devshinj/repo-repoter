@@ -12,7 +12,7 @@ import {
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { listItems, listProposals, activityItemTypes } from "@/infra/logicraft/logicraft-client";
-import { generateLogicraftTaskContent } from "@/infra/gemini/gemini-client";
+import { generateLogicraftTaskContent } from "@/infra/llm/llm-client";
 import type { LogicraftItemSummary, LogicraftProposal } from "@/core/types";
 
 function getYesterdayDate(): string {

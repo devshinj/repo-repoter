@@ -1,6 +1,6 @@
 // src/scheduler/report-generator.ts
-import { GoogleGenAI } from "@google/genai";
 import { getDb } from "@/infra/db/connection";
+import { generateText } from "@/infra/llm/llm-client";
 
 export interface CommitEntry {
   branch: string;
@@ -177,12 +177,8 @@ export async function generateReportContent(
   const displayName = repo.label || `${repo.owner}/${repo.repo}`;
   const prompt = buildPrompt(repo.owner, repo.repo, repo.label, date, commits, false);
 
-  const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-  const result = await genai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
-    contents: prompt,
-  });
+  const text = await generateText(prompt);
 
-  const parsed = parseGeneratedReport(result.text ?? "", displayName);
+  const parsed = parseGeneratedReport(text, displayName);
   return { title: parsed.title, content: parsed.content, commitCount: commits.length };
 }

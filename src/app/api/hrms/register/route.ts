@@ -13,7 +13,7 @@ import {
 import { getCommitsByDateRange, getRepoLastSyncAt } from "@/infra/db/repository";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
-import { generateHrmsTaskContent } from "@/infra/gemini/gemini-client";
+import { generateHrmsTaskContent } from "@/infra/llm/llm-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
 import { syncOneRepo } from "@/scheduler/polling-manager";

@@ -9,7 +9,7 @@ import {
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
-import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/gemini/gemini-client";
+import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/llm/llm-client";
 import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
 import { isAmbiguousCommitMessage } from "@/core/analyzer/task-extractor";
 import { decrypt } from "@/infra/crypto/token-encryption";

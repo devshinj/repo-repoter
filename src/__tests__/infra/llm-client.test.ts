@@ -1,6 +1,6 @@
-// src/__tests__/infra/gemini-client.test.ts
+// src/__tests__/infra/llm-client.test.ts
 import { describe, it, expect } from "vitest";
-import { buildAnalysisPrompt, parseAnalysisResponse, buildHrmsTaskPrompt, parseHrmsTaskResponse } from "@/infra/gemini/gemini-client";
+import { buildAnalysisPrompt, parseAnalysisResponse, buildHrmsTaskPrompt, parseHrmsTaskResponse } from "@/infra/llm/llm-client";
 import type { CommitRecord } from "@/core/types";
 
 const sampleCommits: CommitRecord[] = [

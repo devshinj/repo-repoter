@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRepositoryByIdAndUser } from "@/infra/db/repository";
 import { insertReport, updateReportStatus } from "@/infra/db/report";
 import { auth } from "@/lib/auth";
-import { GoogleGenAI } from "@google/genai";
 import { getDb } from "@/infra/db/connection";
+import { generateText } from "@/infra/llm/llm-client";
 import {
   CommitEntry,
   collectCommitsForDateFromCache,
@@ -84,12 +84,8 @@ export async function POST(request: NextRequest) {
           }
 
           const prompt = buildPrompt(repo.owner, repo.repo, repo.label, dateLabel, allCommits, isRange);
-          const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-          const result = await genai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-          });
-          const parsed = parseGeneratedReport(result.text ?? "", displayName);
+          const text = await generateText(prompt);
+          const parsed = parseGeneratedReport(text, displayName);
           updateReportStatus(db, pendingId, "completed", parsed);
         } catch (err: any) {
           updateReportStatus(db, pendingId, "error", {
@@ -124,13 +120,9 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildPrompt(repo.owner, repo.repo, repo.label, dateLabel, allCommits, isRange);
 
-    const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-    const result = await genai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-    });
+    const text = await generateText(prompt);
 
-    const parsed = parseGeneratedReport(result.text ?? "", displayName);
+    const parsed = parseGeneratedReport(text, displayName);
     const totalAdditions = allCommits.reduce((s, c) => s + c.additions, 0);
     const totalDeletions = allCommits.reduce((s, c) => s + c.deletions, 0);
     const branchSet = [...new Set(allCommits.map((c) => c.branch))];
