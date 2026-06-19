@@ -14,7 +14,8 @@ import {
   hasLogicraftSuccessLog,
   insertLogicraftTaskLog,
 } from "@/infra/db/logicraft";
-import { getCommitsByDateRange } from "@/infra/db/repository";
+import { getCommitsByDateRange, getRepoLastSyncAt } from "@/infra/db/repository";
+import { syncOneRepo } from "@/scheduler/polling-manager";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent, generateLogicraftTaskContent } from "@/infra/llm/llm-client";
@@ -45,8 +46,48 @@ async function executeRegistration(mappingId: number): Promise<void> {
 
   const keyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
   if (!keyRow) {
+    insertTaskLog(db, {
+      mappingId, hrmsTaskId: null, targetDate: date,
+      title: "등록 실패", description: "",
+      status: "error", errorMessage: "HRMS API key not registered",
+    });
     console.error(`[HrmsScheduler] mapping=${mappingId}: no API key for user`);
     return;
+  }
+
+  // ── 동기화 단계: 최근 5분 이내 동기화 안 된 저장소만 sync ──
+  const syncThresholdMs = 5 * 60 * 1000;
+  const failedRepos: string[] = [];
+  for (const repo of mapping.repos) {
+    const repoLabel = repo.label || `${repo.owner}/${repo.repo}`;
+    const lastSync = getRepoLastSyncAt(db, repo.id);
+    if (lastSync && Date.now() - new Date(lastSync).getTime() < syncThresholdMs) {
+      continue;
+    }
+    try {
+      const result = await syncOneRepo(db, mapping.user_id, repo);
+      if (result === null) {
+        failedRepos.push(repoLabel);
+        console.warn(`[HrmsScheduler] mapping=${mappingId}: sync conflict for ${repoLabel}, skipping repo`);
+      }
+    } catch (err) {
+      failedRepos.push(repoLabel);
+      console.error(`[HrmsScheduler] mapping=${mappingId}: sync failed for ${repoLabel} -`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  if (failedRepos.length === mapping.repos.length) {
+    insertTaskLog(db, {
+      mappingId, hrmsTaskId: null, targetDate: date,
+      title: "등록 실패", description: "",
+      status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}`,
+    });
+    console.error(`[HrmsScheduler] mapping=${mappingId}: all repos failed to sync, aborting`);
+    return;
+  }
+
+  if (failedRepos.length > 0) {
+    console.warn(`[HrmsScheduler] mapping=${mappingId}: ${failedRepos.length} repo(s) failed, continuing with remaining`);
   }
 
   const repoIds = mapping.repos.map((r: any) => r.id);
@@ -63,6 +104,13 @@ async function executeRegistration(mappingId: number): Promise<void> {
   ) as any[];
 
   if (cacheCommits.length === 0) {
+    insertTaskLog(db, {
+      mappingId, hrmsTaskId: null, targetDate: date,
+      title: "건너뜀", description: "",
+      status: "skipped", errorMessage: failedRepos.length > 0
+        ? `No commits found (sync failed: ${failedRepos.join(", ")})`
+        : null,
+    });
     console.log(`[HrmsScheduler] mapping=${mappingId}: no commits on ${date}, skipping`);
     return;
   }

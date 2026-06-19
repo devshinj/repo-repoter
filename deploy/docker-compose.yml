@@ -6,11 +6,14 @@ services:
     extra_hosts:
       - "hrms.cudo.co.kr:192.168.102.2"
       - "logicraft.cudo.co.kr:192.168.102.2"
+      - "open-llm.cudo.co.kr:192.168.102.107"
     volumes:
       - app-data:/app/data
     environment:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      QWEN_CODER_KEY: ${QWEN_CODER_KEY}
+      QWEN_MODEL: ${QWEN_MODEL}
+      QWEN_API_URL: ${QWEN_API_URL}
       AUTH_HRMS_ID: ${AUTH_HRMS_ID}
       AUTH_HRMS_SECRET: ${AUTH_HRMS_SECRET}
       AUTH_HRMS_ISSUER: ${AUTH_HRMS_ISSUER}

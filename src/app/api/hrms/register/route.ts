@@ -38,9 +38,10 @@ async function executeRegistration(
   const db = getDb();
 
   try {
-    // ── 1단계: 저장소 동기화 ──
+    // ── 1단계: 저장소 동기화 (부분 실패 허용) ──
     const syncThresholdMs = 5 * 60 * 1000;
     const repoTotal = mapping.repos.length;
+    const failedRepos: string[] = [];
 
     for (let i = 0; i < repoTotal; i++) {
       const repo = mapping.repos[i];
@@ -61,20 +62,37 @@ async function executeRegistration(
       try {
         const result = await syncOneRepo(db, userId, repo);
         if (result === null) {
+          failedRepos.push(repoLabel);
           emitJobEvent(logId, {
-            step: "error",
-            message: `동기화 실패`,
-            error: `${repoLabel}이(가) 이미 동기화 중입니다. 잠시 후 다시 시도해주세요.`,
+            step: "syncing",
+            message: `${repoLabel} 동기화 충돌 — 건너뜀 (${i + 1}/${repoTotal})`,
+            detail: `이미 동기화 중입니다`,
+            repoIndex: i + 1,
+            repoTotal,
           });
-          updateTaskLog(db, logId, { status: "error", errorMessage: `Sync conflict: ${repoLabel}` });
-          return;
         }
       } catch (error) {
+        failedRepos.push(repoLabel);
         const detail = error instanceof Error ? error.message : String(error);
-        emitJobEvent(logId, { step: "error", message: `동기화 실패: ${repoLabel}`, error: detail });
-        updateTaskLog(db, logId, { status: "error", errorMessage: `Sync failed: ${repoLabel} - ${detail}` });
-        return;
+        emitJobEvent(logId, {
+          step: "syncing",
+          message: `${repoLabel} 동기화 실패 — 건너뜀 (${i + 1}/${repoTotal})`,
+          detail,
+          repoIndex: i + 1,
+          repoTotal,
+        });
       }
+    }
+
+    // 모든 저장소가 실패한 경우에만 중단
+    if (failedRepos.length === repoTotal) {
+      emitJobEvent(logId, {
+        step: "error",
+        message: "모든 저장소 동기화 실패",
+        error: failedRepos.join(", "),
+      });
+      updateTaskLog(db, logId, { status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}` });
+      return;
     }
 
     // ── 2단계: 커밋 수집 (저장소별 git_author 필터 적용) ──
