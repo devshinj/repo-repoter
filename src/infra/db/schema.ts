@@ -185,7 +185,92 @@ export function createTables(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_hrms_logicraft_mappings_user
       ON hrms_logicraft_mappings(user_id);
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS project_repositories (
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      PRIMARY KEY (project_id, repository_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS milestones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+      repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      raw_input TEXT,
+      deadline TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'cancelled')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS feed_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      scope_type TEXT NOT NULL CHECK(scope_type IN ('project', 'repository')),
+      scope_id INTEGER NOT NULL,
+      briefing TEXT,
+      milestone_summary TEXT,
+      commit_shas TEXT,
+      group_suggestion TEXT,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS rss_commits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      sha TEXT NOT NULL,
+      author_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      committed_at TEXT NOT NULL,
+      feed_entry_id INTEGER REFERENCES feed_entries(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(repository_id, sha)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_projects_user_id
+      ON projects(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_milestones_user_id
+      ON milestones(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_milestones_project_id
+      ON milestones(project_id);
+
+    CREATE INDEX IF NOT EXISTS idx_milestones_status
+      ON milestones(status);
+
+    CREATE INDEX IF NOT EXISTS idx_feed_entries_user_id
+      ON feed_entries(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_feed_entries_scope
+      ON feed_entries(scope_type, scope_id);
+
+    CREATE INDEX IF NOT EXISTS idx_feed_entries_created_at
+      ON feed_entries(created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_rss_commits_repository_id
+      ON rss_commits(repository_id);
+
+    CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry_id
+      ON rss_commits(feed_entry_id);
+
+    CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry_null
+      ON rss_commits(repository_id) WHERE feed_entry_id IS NULL;
   `);
+
 }
 
 export function migrateSchema(db: Database.Database): void {
