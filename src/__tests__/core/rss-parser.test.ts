@@ -54,11 +54,11 @@ describe("parseAtomFeed", () => {
     const xml = `<?xml version="1.0"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
-    <id>tag:github.com,2008:Grit::Commit/xyz123</id>
+    <id>tag:github.com,2008:Grit::Commit/abc0def123</id>
     <title>fix: Test &amp; verify &lt;condition&gt;</title>
     <updated>2026-06-23T10:00:00Z</updated>
     <author><name>user</name></author>
-    <link rel="alternate" type="text/html" href="https://github.com/owner/repo/commit/xyz123"/>
+    <link rel="alternate" type="text/html" href="https://github.com/owner/repo/commit/abc0def123"/>
   </entry>
 </feed>`;
     const commits = parseAtomFeed(xml, 1);
