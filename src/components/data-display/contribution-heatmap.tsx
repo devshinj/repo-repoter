@@ -2,12 +2,14 @@
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { GitCommit, TrendingUp, Flame } from "lucide-react";
+import { GitCommit, TrendingUp, Flame, FolderGit2 } from "lucide-react";
 import { calcStreak, formatDate } from "@/components/growth-tree/hooks/use-tree-metrics";
+import type { DashboardStats } from "@/core/types";
 
 interface ContributionHeatmapProps {
   data: Record<string, number>;
   months?: number;
+  stats?: DashboardStats | null;
 }
 
 const levelColors = [
@@ -50,7 +52,7 @@ function calcBusiestDay(data: Record<string, number>): { date: string; count: nu
   return max > 0 ? { date: maxDate, count: max } : null;
 }
 
-export function ContributionHeatmap({ data, months = 6 }: ContributionHeatmapProps) {
+export function ContributionHeatmap({ data, months = 6, stats }: ContributionHeatmapProps) {
   const isDark = useIsDark();
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -156,47 +158,59 @@ export function ContributionHeatmap({ data, months = 6 }: ContributionHeatmapPro
   return (
     <Card className="overflow-hidden">
       <CardContent className={cardPadding}>
-        {/* Stats row */}
-        <div className={`flex items-center ${rowGap} mb-4`}>
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-primary/10`}>
-              <GitCommit className={`${iconSize} text-primary`} />
-            </div>
-            <div>
-              <p className={`${statValue} font-bold leading-none`}>{totalCommits.toLocaleString()}</p>
-              <p className={`${statLabel} text-muted-foreground mt-0.5`}>총 커밋</p>
-            </div>
-          </div>
-          <div className={`w-px ${dividerHeight} bg-border`} />
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-emerald-500/10`}>
-              <TrendingUp className={`${iconSize} text-emerald-600 dark:text-emerald-400`} />
-            </div>
-            <div>
-              <p className={`${statValue} font-bold leading-none`}>{activeDays}</p>
-              <p className={`${statLabel} text-muted-foreground mt-0.5`}>활동일</p>
-            </div>
-          </div>
-          {streak > 0 && (
-            <>
-              <div className={`w-px ${dividerHeight} bg-border`} />
-              <div className="flex items-center gap-2">
-                <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-orange-500/10`}>
-                  <Flame className={`${iconSize} text-orange-500`} />
-                </div>
-                <div>
-                  <p className={`${statValue} font-bold leading-none`}>{streak}일</p>
-                  <p className={`${statLabel} text-muted-foreground mt-0.5`}>연속 커밋</p>
-                </div>
+        {/* Stats rows */}
+        <div className="mb-4 space-y-2">
+          {/* 윗줄: 커밋 관련 */}
+          <div className={`flex items-center ${rowGap}`}>
+            <div className="flex items-center gap-1.5">
+              <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-primary/10`}>
+                <GitCommit className={`${iconSize} text-primary`} />
               </div>
-            </>
-          )}
-          {busiest && (
-            <div className="ml-auto text-right hidden md:block">
-              <p className="text-[11px] text-muted-foreground">최다 커밋일</p>
-              <p className="text-xs font-medium">{busiest.date} · {busiest.count}커밋</p>
+              <div>
+                <p className={`${statValue} font-bold leading-none`}>{stats?.todayCommits ?? totalCommits.toLocaleString()}</p>
+                <p className={`${statLabel} text-muted-foreground mt-0.5`}>{stats ? "오늘" : "총 커밋"}</p>
+              </div>
             </div>
-          )}
+            <div className={`w-px ${dividerHeight} bg-border`} />
+            <div className="flex items-center gap-1.5">
+              <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-emerald-500/10`}>
+                <TrendingUp className={`${iconSize} text-emerald-600 dark:text-emerald-400`} />
+              </div>
+              <div>
+                <p className={`${statValue} font-bold leading-none`}>{stats?.weekCommits ?? activeDays}</p>
+                <p className={`${statLabel} text-muted-foreground mt-0.5`}>{stats ? "주간" : "활동일"}</p>
+              </div>
+            </div>
+            {streak > 0 && (
+              <>
+                <div className={`w-px ${dividerHeight} bg-border`} />
+                <div className="flex items-center gap-1.5">
+                  <div className={`flex items-center justify-center ${iconBox} rounded-lg bg-orange-500/10`}>
+                    <Flame className={`${iconSize} text-orange-500`} />
+                  </div>
+                  <div>
+                    <p className={`${statValue} font-bold leading-none`}>{streak}일</p>
+                    <p className={`${statLabel} text-muted-foreground mt-0.5`}>연속</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          {/* 아랫줄: 저장소 + 최다 커밋일 */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {stats && (
+              <div className="flex items-center gap-1">
+                <FolderGit2 className="h-3 w-3" />
+                <span>저장소 <span className="font-medium text-foreground">{stats.repoCount}</span></span>
+              </div>
+            )}
+            {busiest && (
+              <>
+                {stats && <span className="text-border">·</span>}
+                <span>최다 {busiest.date} · {busiest.count}커밋</span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* SVG Heatmap */}

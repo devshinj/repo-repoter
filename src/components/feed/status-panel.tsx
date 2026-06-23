@@ -1,6 +1,5 @@
 "use client";
 
-import { StatCard } from "@/components/data-display/stat-card";
 import { ContributionHeatmap } from "@/components/data-display/contribution-heatmap";
 import { GrowthTree } from "@/components/growth-tree/growth-tree";
 import type { DashboardStats, TreeMetrics } from "@/core/types";
@@ -49,19 +48,9 @@ export function StatusPanel({
         )}
       </div>
 
-      {/* 통계 카드 */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label="오늘 커밋" value={stats.todayCommits} />
-          <StatCard label="주간 커밋" value={stats.weekCommits} />
-          <StatCard label="보고서" value={stats.totalReports} />
-          <StatCard label="저장소" value={stats.repoCount} />
-        </div>
-      )}
-
-      {/* 히트맵 */}
+      {/* 히트맵 + 통계 통합 */}
       {Object.keys(heatmapData).length > 0 && (
-        <ContributionHeatmap data={heatmapData} />
+        <ContributionHeatmap data={heatmapData} stats={stats} />
       )}
 
       {/* 성장 트리 */}
