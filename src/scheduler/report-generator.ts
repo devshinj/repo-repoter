@@ -147,7 +147,13 @@ ${rule4}
 }
 
 export function parseGeneratedReport(text: string, displayName: string): { title: string; content: string } {
-  const lines = text.split("\n");
+  // LLM이 응답 전체를 코드 펜스로 감싸는 경우 제거
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "");
+  }
+
+  const lines = cleaned.split("\n");
   let title = `[${displayName}] 업무 보고서`;
   let contentStartIndex = 0;
 

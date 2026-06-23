@@ -253,7 +253,13 @@ ${repoSections}
 }
 
 export function parseHrmsTaskResponse(text: string): { title: string; description: string } {
-  const lines = text.split("\n");
+  // LLM이 응답 전체를 코드 펜스로 감싸는 경우 제거
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "");
+  }
+
+  const lines = cleaned.split("\n");
   let title = "업무 수행";
   let contentStartIndex = 0;
 
