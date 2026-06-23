@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/header";
 import { StatusPanel } from "@/components/feed/status-panel";
 import { NewsfeedPanel } from "@/components/feed/newsfeed-panel";
+import { MilestoneDialog } from "@/components/feed/milestone-dialog";
 import { api } from "@/lib/api-url";
 import { calcStreak, calcInactiveDays } from "@/components/growth-tree/hooks/use-tree-metrics";
 import type { TreeMetrics, DashboardStats } from "@/core/types";
@@ -91,6 +92,15 @@ export default function DashboardPage() {
   const [feedEntries, setFeedEntries] = useState<FeedEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Milestone dialog state
+  const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
+  const [milestoneInitialInput, setMilestoneInitialInput] = useState("");
+  const [milestonePreselectedScope, setMilestonePreselectedScope] = useState<{
+    type: "project" | "repository";
+    id: number;
+    name: string;
+  } | null>(null);
 
   // ---------------------------------------------------------------------------
   // Stats / heatmap polling
@@ -204,24 +214,65 @@ export default function DashboardPage() {
       : null;
 
   // ---------------------------------------------------------------------------
-  // Event handlers (stubs — actual dialog in Task 7)
+  // Feed refresh helper (used by milestone/project creation callbacks)
+  // ---------------------------------------------------------------------------
+  const refreshFeed = useCallback(async () => {
+    try {
+      const [feedRes, projectsRes] = await Promise.all([
+        fetch(api("/feed")),
+        fetch(api("/projects")),
+      ]);
+      const [feedData, projectsData] = await Promise.all([
+        feedRes.json(),
+        projectsRes.json(),
+      ]);
+      setFeedEntries(Array.isArray(feedData) ? feedData : feedData.entries ?? []);
+      setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
+    } catch {
+      // Feed errors are non-critical
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Event handlers
   // ---------------------------------------------------------------------------
   const handleAddMilestone = useCallback(
-    (_scopeType: "project" | "repository", _scopeId: number) => {
-      // Task 7: open milestone dialog
+    (scopeType: "project" | "repository", scopeId: number, rawInput?: string) => {
+      if (scopeId === -1) {
+        // Opened from top input bar — use raw text as initial input, no preselected scope
+        setMilestoneInitialInput(rawInput ?? "");
+        setMilestonePreselectedScope(null);
+      } else {
+        // Opened from feed card — preselect the card's scope
+        const scopeName = scopeNames.get(`${scopeType}:${scopeId}`) ?? "";
+        setMilestoneInitialInput("");
+        setMilestonePreselectedScope({ type: scopeType, id: scopeId, name: scopeName });
+      }
+      setMilestoneDialogOpen(true);
     },
-    []
+    [scopeNames]
   );
 
   const handleAcceptGroupSuggestion = useCallback(
-    (_suggestion: GroupSuggestion) => {
-      // TODO: call API to create project from suggestion
+    async (suggestion: GroupSuggestion) => {
+      try {
+        const repositoryIds = suggestion.repositories.map((r) => r.id);
+        const name = suggestion.repositories.map((r) => r.name).join(" + ");
+        await fetch(api("/projects"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, repositoryIds }),
+        });
+        await refreshFeed();
+      } catch {
+        // Non-critical
+      }
     },
-    []
+    [refreshFeed]
   );
 
-  const handleDismissGroupSuggestion = useCallback((_entryId: number) => {
-    setFeedEntries((prev) => prev.filter((e) => e.id !== _entryId));
+  const handleDismissGroupSuggestion = useCallback((entryId: number) => {
+    setFeedEntries((prev) => prev.filter((e) => e.id !== entryId));
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -280,6 +331,17 @@ export default function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* Milestone dialog — rendered at root to avoid stacking context issues */}
+      <MilestoneDialog
+        open={milestoneDialogOpen}
+        onOpenChange={setMilestoneDialogOpen}
+        initialRawInput={milestoneInitialInput}
+        preselectedScope={milestonePreselectedScope}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        repositories={repos.map((r) => ({ id: r.id, name: `${r.owner}/${r.repo}` }))}
+        onCreated={refreshFeed}
+      />
     </div>
   );
 }

@@ -11,7 +11,7 @@ interface NewsfeedPanelProps {
   entries: FeedEntry[];
   scopeNames: Map<string, string>; // "project:1" → "MyProject"
   isRefreshing: boolean;
-  onAddMilestone: (scopeType: "project" | "repository", scopeId: number) => void;
+  onAddMilestone: (scopeType: "project" | "repository", scopeId: number, rawInput?: string) => void;
   onAcceptGroupSuggestion: (suggestion: GroupSuggestion) => void;
   onDismissGroupSuggestion: (entryId: number) => void;
 }
@@ -68,7 +68,7 @@ export function NewsfeedPanel({
                 disabled={!milestoneInput.trim()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddMilestone("project", -1);
+                  onAddMilestone("project", -1, milestoneInput);
                 }}
               >
                 설정하기
