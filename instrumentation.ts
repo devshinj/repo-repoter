@@ -5,8 +5,10 @@ export async function register() {
     const { startScheduler } = await import("@/scheduler/polling-manager");
     const { startReportScheduler } = await import("@/scheduler/report-scheduler");
     const { startHrmsScheduler } = await import("@/scheduler/hrms-scheduler");
+    const { startFeedScheduler } = await import("@/scheduler/feed-scheduler");
     startScheduler(15);
     startReportScheduler();
     startHrmsScheduler();
+    startFeedScheduler();
   }
 }
