@@ -76,7 +76,7 @@ export function getActiveMilestonesByScope(
       title, raw_input as rawInput, deadline, status, created_at as createdAt, updated_at as updatedAt
     FROM milestones
     WHERE ${colName} = ? AND status = 'active'
-    ORDER BY deadline ASC, created_at DESC
+    ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC
   `
     )
     .all(scopeId) as Array<{

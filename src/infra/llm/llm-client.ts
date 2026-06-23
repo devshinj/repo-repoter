@@ -161,6 +161,7 @@ export function buildHrmsTaskPrompt(
 
   return `아래 Git 커밋 메시지와 변경 파일 정보를 기반으로 ${date} 업무 내용을 작성해주세요.
 총 커밋: ${totalCommits}건
+추정 작업 시간: ${estimatedMinutes}분
 
 [커밋 목록]
 ${repoSections}

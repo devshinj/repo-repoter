@@ -29,10 +29,8 @@ export function decrypt(encrypted: string): string {
 export function maskToken(token: string): string {
   if (token.length <= 4) return "*".repeat(token.length);
 
-  // prefix 패턴 감지 (ghp_, gho_, github_pat_, glpat-, gtea_ 등)
-  const prefixMatch = token.match(/^([a-zA-Z]+[-_])/);
-  const prefix = prefixMatch ? prefixMatch[0] : "";
   const suffix = token.slice(-4);
-
-  return prefix + "****" + suffix;
+  const maskedLength = Math.max(1, token.length - 4);
+  
+  return "*".repeat(maskedLength) + suffix;
 }
