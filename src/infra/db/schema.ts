@@ -207,11 +207,12 @@ export function createTables(db: Database.Database): void {
       project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
       repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
-      raw_input TEXT,
+      raw_input TEXT NOT NULL,
       deadline TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'cancelled')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK (project_id IS NOT NULL OR repository_id IS NOT NULL)
     );
 
     CREATE TABLE IF NOT EXISTS feed_entries (
@@ -240,35 +241,20 @@ export function createTables(db: Database.Database): void {
       UNIQUE(repository_id, sha)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_projects_user_id
+    CREATE INDEX IF NOT EXISTS idx_projects_user
       ON projects(user_id);
 
-    CREATE INDEX IF NOT EXISTS idx_milestones_user_id
-      ON milestones(user_id);
+    CREATE INDEX IF NOT EXISTS idx_milestones_user_status
+      ON milestones(user_id, status);
 
-    CREATE INDEX IF NOT EXISTS idx_milestones_project_id
-      ON milestones(project_id);
+    CREATE INDEX IF NOT EXISTS idx_feed_entries_user_created
+      ON feed_entries(user_id, created_at DESC);
 
-    CREATE INDEX IF NOT EXISTS idx_milestones_status
-      ON milestones(status);
+    CREATE INDEX IF NOT EXISTS idx_rss_commits_repo_sha
+      ON rss_commits(repository_id, sha);
 
-    CREATE INDEX IF NOT EXISTS idx_feed_entries_user_id
-      ON feed_entries(user_id);
-
-    CREATE INDEX IF NOT EXISTS idx_feed_entries_scope
-      ON feed_entries(scope_type, scope_id);
-
-    CREATE INDEX IF NOT EXISTS idx_feed_entries_created_at
-      ON feed_entries(created_at DESC);
-
-    CREATE INDEX IF NOT EXISTS idx_rss_commits_repository_id
-      ON rss_commits(repository_id);
-
-    CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry_id
+    CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry
       ON rss_commits(feed_entry_id);
-
-    CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry_null
-      ON rss_commits(repository_id) WHERE feed_entry_id IS NULL;
   `);
 
 }
