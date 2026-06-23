@@ -1,0 +1,201 @@
+import type { RssCommit } from "@/core/feed/feed-types";
+import type { GroupSuggestion } from "@/core/feed/feed-types";
+import type { Milestone } from "@/core/project/project-types";
+
+export interface BriefingPromptInput {
+  scopeName: string;
+  commits: RssCommit[];
+  milestones: Milestone[];
+}
+
+export interface MilestoneParseResult {
+  title: string;
+  deadline: string | null;
+  suggestedScope: {
+    type: "project" | "repository";
+    id: number;
+    name: string;
+    confidence: "high" | "medium" | "low";
+  } | null;
+}
+
+export function buildBriefingPrompt(input: BriefingPromptInput): string {
+  const { scopeName, commits, milestones } = input;
+
+  // 작업자별 그룹핑
+  const byAuthor = new Map<string, RssCommit[]>();
+  for (const c of commits) {
+    const list = byAuthor.get(c.authorName) ?? [];
+    list.push(c);
+    byAuthor.set(c.authorName, list);
+  }
+
+  const authorSections = Array.from(byAuthor.entries())
+    .map(([author, authorCommits]) => {
+      const lines = authorCommits
+        .map((c) => `  - ${c.message} (${c.committedAt})`)
+        .join("\n");
+      return `### ${author}\n${lines}`;
+    })
+    .join("\n\n");
+
+  const milestoneSection =
+    milestones.length > 0
+      ? `\n[활성 마일스톤]\n${milestones
+          .map((m) => {
+            const deadline = m.deadline ? ` (마감: ${m.deadline})` : "";
+            return `- ${m.title}${deadline}`;
+          })
+          .join("\n")}\n`
+      : "";
+
+  return `당신은 개발팀의 업무 현황을 브리핑하는 어시스턴트입니다.
+친절하고 명확한 비즈니스 톤으로, 구어체로 설명하세요.
+작업자별로 분류하여 누가 무엇을 하고 있는지 정리하세요.
+
+[프로젝트/저장소]
+${scopeName}
+${milestoneSection}
+[커밋 목록 — 작업자별]
+${authorSections}
+
+[출력 지시]
+${
+  milestones.length > 0
+    ? `1. 마일스톤 상태 분석을 먼저 작성하세요. 각 마일스톤에 대해 커밋 활동을 분석하여 상태(미착수/개발 중/수정·보완/활동 없음/지연 위험)를 판단하세요. 마감일이 있으면 남은 일수를 언급하세요.
+2. 이후 작업자별 활동 요약을 작성하세요.`
+    : `작업자별 활동 요약을 작성하세요.`
+}
+- 텍스트만 응답 (JSON/코드블록 불필요)
+- 한국어로 작성`;
+}
+
+export function buildMilestoneParsePrompt(
+  rawInput: string,
+  currentDate: string,
+  projects: Array<{ id: number; name: string }>,
+  repositories: Array<{ id: number; name: string }>
+): string {
+  const projectList =
+    projects.length > 0
+      ? projects
+          .map((p) => `  - id: ${p.id}, name: "${p.name}"`)
+          .join("\n")
+      : "  (없음)";
+  const repoList =
+    repositories.length > 0
+      ? repositories
+          .map((r) => `  - id: ${r.id}, name: "${r.name}"`)
+          .join("\n")
+      : "  (없음)";
+
+  return `사용자의 자연어 목표를 구조화하세요.
+
+[입력]
+- 사용자 원문: "${rawInput}"
+- 현재 날짜: ${currentDate}
+- 등록된 프로젝트 목록:
+${projectList}
+- 등록된 저장소 목록:
+${repoList}
+
+[출력 JSON]
+{
+  "title": "명확하고 간결한 마일스톤 제목",
+  "deadline": "YYYY-MM-DD 또는 null",
+  "suggested_scope": {
+    "type": "project 또는 repository",
+    "id": 숫자,
+    "name": "이름",
+    "confidence": "high 또는 medium 또는 low"
+  }
+}
+
+규칙:
+- "다음 주 금요일"처럼 상대 날짜는 현재 날짜 기준으로 절대 날짜(YYYY-MM-DD)로 변환
+- 입력에 날짜 언급이 없으면 deadline은 null
+- 프로젝트/저장소 목록에서 관련성 높은 것을 추천. 확신 없으면 confidence를 "low"로
+- 관련 프로젝트/저장소가 전혀 없으면 suggested_scope를 null
+- JSON만 응답`;
+}
+
+export function parseMilestoneParseResponse(
+  text: string
+): MilestoneParseResult {
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?\n?/, "")
+      .replace(/\n?```$/, "");
+  }
+  const parsed = JSON.parse(cleaned);
+  return {
+    title: parsed.title,
+    deadline: parsed.deadline || null,
+    suggestedScope: parsed.suggested_scope
+      ? {
+          type: parsed.suggested_scope.type,
+          id: parsed.suggested_scope.id,
+          name: parsed.suggested_scope.name,
+          confidence: parsed.suggested_scope.confidence,
+        }
+      : null,
+  };
+}
+
+export function buildGroupSuggestionPrompt(
+  repositories: Array<{
+    id: number;
+    name: string;
+    language: string | null;
+    recentMessages: string[];
+  }>
+): string {
+  const repoLines = repositories
+    .map((r) => {
+      const msgs = r.recentMessages
+        .slice(0, 5)
+        .map((m) => `    - ${m}`)
+        .join("\n");
+      return `- id: ${r.id}, name: "${r.name}", language: ${
+        r.language || "unknown"
+      }\n  최근 커밋:\n${msgs}`;
+    })
+    .join("\n");
+
+  return `아래 저장소들이 같은 프로젝트에 속할 가능성이 있는지 판단하세요.
+
+[저장소 목록]
+${repoLines}
+
+관련성이 보이면 다음 JSON 형태로 응답:
+{
+  "suggestion": "프로젝트로 묶는 이유 설명",
+  "repositories": [{"id": 숫자, "name": "이름"}, ...]
+}
+
+관련성이 없으면 null 만 응답하세요.
+JSON 또는 null 만 응답.`;
+}
+
+export function parseGroupSuggestionResponse(
+  text: string
+): GroupSuggestion | null {
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?\n?/, "")
+      .replace(/\n?```$/, "");
+  }
+  if (cleaned === "null" || cleaned === "") return null;
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (!parsed?.suggestion || !parsed?.repositories) return null;
+    return {
+      suggestion: parsed.suggestion,
+      repositories: parsed.repositories,
+    };
+  } catch {
+    return null;
+  }
+}

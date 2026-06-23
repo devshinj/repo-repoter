@@ -8,7 +8,7 @@ export interface RssCommit {
 
 export interface GroupSuggestion {
   suggestion: string;
-  repositories: number[];
+  repositories: Array<{ id: number; name: string }>;
 }
 
 export interface FeedEntry {
