@@ -25,13 +25,47 @@ export function buildRssUrl(
   }
 }
 
+export interface RssFetchResult {
+  commits: RssCommit[];
+  /** 원래 브랜치와 다른 브랜치에서 성공한 경우 해당 브랜치명 */
+  correctedBranch?: string;
+}
+
+const branchFallbacks = ["main", "master", "develop"];
+
 export async function fetchRssCommits(
   repositoryId: number,
   meta: GitProviderMeta,
   owner: string,
   repo: string,
   branch: string
-): Promise<RssCommit[]> {
+): Promise<RssFetchResult> {
+  // 1차: 요청된 브랜치로 시도
+  const result = await tryFetchRss(repositoryId, meta, owner, repo, branch);
+  if (result.commits.length > 0 || result.status !== 404) {
+    return { commits: result.commits };
+  }
+
+  // 2차: 404면 fallback 브랜치 시도
+  for (const fallback of branchFallbacks) {
+    if (fallback === branch) continue;
+    const fallbackResult = await tryFetchRss(repositoryId, meta, owner, repo, fallback);
+    if (fallbackResult.commits.length > 0 || fallbackResult.status === 200) {
+      console.log(`[RSS] ${owner}/${repo}: branch corrected ${branch} → ${fallback}`);
+      return { commits: fallbackResult.commits, correctedBranch: fallback };
+    }
+  }
+
+  return { commits: [] };
+}
+
+async function tryFetchRss(
+  repositoryId: number,
+  meta: GitProviderMeta,
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<{ commits: RssCommit[]; status: number }> {
   const url = buildRssUrl(meta, owner, repo, branch);
 
   try {
@@ -41,24 +75,26 @@ export async function fetchRssCommits(
     });
 
     if (!response.ok) {
-      console.warn(`[RSS] ${url} returned ${response.status}`);
-      return [];
+      if (response.status !== 404) {
+        console.warn(`[RSS] ${url} returned ${response.status}`);
+      }
+      return { commits: [], status: response.status };
     }
 
     const xml = await response.text();
 
-    // Atom 피드인지 RSS 피드인지 판별
+    let commits: RssCommit[];
     if (xml.includes("<feed") && xml.includes('xmlns="http://www.w3.org/2005/Atom"')) {
-      return parseAtomFeed(xml, repositoryId);
-    }
-    if (xml.includes("<rss") || xml.includes("<channel>")) {
-      return parseRssFeed(xml, repositoryId);
+      commits = parseAtomFeed(xml, repositoryId);
+    } else if (xml.includes("<rss") || xml.includes("<channel>")) {
+      commits = parseRssFeed(xml, repositoryId);
+    } else {
+      commits = parseAtomFeed(xml, repositoryId);
     }
 
-    // 알 수 없는 형식이면 Atom으로 시도
-    return parseAtomFeed(xml, repositoryId);
+    return { commits, status: 200 };
   } catch (error) {
     console.warn(`[RSS] fetch failed for ${url}:`, error);
-    return [];
+    return { commits: [], status: 0 };
   }
 }

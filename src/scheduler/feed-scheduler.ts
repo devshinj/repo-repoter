@@ -53,15 +53,20 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
     try {
       const meta = resolveProviderMeta(repo);
       if (!meta) continue;
-      const rssCommits = await fetchRssCommits(
+      const result = await fetchRssCommits(
         repo.id,
         meta,
         repo.owner,
         repo.repo,
         repo.branch
       );
-      if (rssCommits.length > 0) {
-        insertRssCommits(db, rssCommits);
+      if (result.commits.length > 0) {
+        insertRssCommits(db, result.commits);
+      }
+      // 브랜치 자동 교정: 404 fallback으로 다른 브랜치에서 성공한 경우 DB 업데이트
+      if (result.correctedBranch) {
+        db.prepare("UPDATE repositories SET branch = ? WHERE id = ?").run(result.correctedBranch, repo.id);
+        repo.branch = result.correctedBranch;
       }
     } catch (err) {
       console.warn(`[FeedScheduler] RSS fetch failed for repo ${repo.id}:`, err);
