@@ -162,11 +162,8 @@ export default function DashboardPage() {
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const loadFeed = async () => {
-      setIsRefreshing(true);
       try {
-        // 1. Trigger RSS collection + briefing generation
-        await fetch(api("/feed/refresh"), { method: "POST" });
-        // 2. Load feed entries and projects in parallel
+        // 1. 캐시된 데이터 즉시 표시
         const [feedRes, projectsRes] = await Promise.all([
           fetch(api("/feed")),
           fetch(api("/projects")),
@@ -179,6 +176,19 @@ export default function DashboardPage() {
         setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
       } catch {
         // Feed errors are non-critical — don't set syncError
+      } finally {
+        setInitialLoading(false);
+      }
+
+      // 2. 백그라운드에서 새 브리핑 수집 후 갱신
+      setIsRefreshing(true);
+      try {
+        await fetch(api("/feed/refresh"), { method: "POST" });
+        const freshRes = await fetch(api("/feed"));
+        const freshData = await freshRes.json();
+        setFeedEntries(Array.isArray(freshData) ? freshData : freshData.entries ?? []);
+      } catch {
+        // 백그라운드 갱신 실패는 무시
       } finally {
         setIsRefreshing(false);
       }
