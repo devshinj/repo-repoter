@@ -39,15 +39,24 @@ export function NewsfeedPanel({
   // 빈 브리핑 필터링
   const validEntries = entries.filter((e) => e.briefing && e.briefing.trim().length > 0);
 
-  // 날짜별 그룹핑
-  const groupedByDate = new Map<string, FeedEntry[]>();
+  // scope(저장소/프로젝트) 단위 그룹핑
+  const groupedByScope = new Map<string, FeedEntry[]>();
   for (const entry of validEntries) {
-    const dateKey = entry.periodEnd.split("T")[0];
-    const list = groupedByDate.get(dateKey) ?? [];
+    const scopeKey = `${entry.scopeType}:${entry.scopeId}`;
+    const list = groupedByScope.get(scopeKey) ?? [];
     list.push(entry);
-    groupedByDate.set(dateKey, list);
+    groupedByScope.set(scopeKey, list);
   }
-  const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
+  // 각 scope 내에서 최신순 정렬, scope 그룹도 최신 엔트리 기준 정렬
+  for (const [key, list] of groupedByScope) {
+    list.sort((a, b) => b.periodEnd.localeCompare(a.periodEnd));
+    groupedByScope.set(key, list);
+  }
+  const sortedScopes = Array.from(groupedByScope.keys()).sort((a, b) => {
+    const latestA = groupedByScope.get(a)![0].periodEnd;
+    const latestB = groupedByScope.get(b)![0].periodEnd;
+    return latestB.localeCompare(latestA);
+  });
 
   const isEmpty = !isRefreshing && validEntries.length === 0;
 
@@ -120,13 +129,13 @@ export function NewsfeedPanel({
         </div>
       )}
 
-      {/* 날짜별 그룹 피드 카드 */}
-      {sortedDates.map((dateKey) => (
-        <div key={dateKey} className="space-y-3">
+      {/* scope(저장소/프로젝트)별 피드 카드 */}
+      {sortedScopes.map((scopeKey) => (
+        <div key={scopeKey} className="space-y-3">
           <p className="text-xs font-medium text-muted-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-1">
-            {formatDateLabel(dateKey)}
+            {scopeNames.get(scopeKey) ?? "Unknown"}
           </p>
-          {groupedByDate.get(dateKey)!.map((entry) => (
+          {groupedByScope.get(scopeKey)!.map((entry) => (
             <div key={entry.id}>
               <FeedCard
                 entry={entry}
@@ -260,19 +269,3 @@ export function NewsfeedPanel({
   );
 }
 
-function formatDateLabel(dateKey: string): string {
-  const d = new Date(dateKey + "T00:00:00");
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-
-  const formatted = d.toLocaleDateString("ko-KR", {
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
-
-  if (diff === 0) return `오늘 — ${formatted}`;
-  if (diff === 1) return `어제 — ${formatted}`;
-  return formatted;
-}
