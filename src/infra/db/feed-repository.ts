@@ -124,6 +124,18 @@ export function getLatestMilestoneSummary(
   return row?.milestone_summary ?? null;
 }
 
+export function deleteOrphanedFeedEntries(db: Database.Database, userId: string): void {
+  db.prepare(`
+    DELETE FROM feed_entries
+    WHERE user_id = ?
+      AND (
+        (scope_type = 'repository' AND scope_id NOT IN (SELECT id FROM repositories))
+        OR
+        (scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects))
+      )
+  `).run(userId);
+}
+
 export function getFeedEntries(
   db: Database.Database,
   userId: string,
