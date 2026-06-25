@@ -1,5 +1,6 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Target } from "lucide-react";
@@ -32,8 +33,8 @@ export function FeedCard({ entry, scopeName, onAddMilestone }: FeedCardProps) {
             {entry.milestoneSummary}
           </div>
         )}
-        <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-          {entry.briefing}
+        <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5">
+          <ReactMarkdown>{entry.briefing ?? ""}</ReactMarkdown>
         </div>
         <p className="mt-2 text-xs text-muted-foreground/60">
           {formatPeriod(entry.periodStart, entry.periodEnd)}

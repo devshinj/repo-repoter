@@ -31,7 +31,20 @@ export function NewsfeedPanel({
   const getScopeName = (entry: FeedEntry) =>
     scopeNames.get(`${entry.scopeType}:${entry.scopeId}`) ?? "Unknown";
 
-  const isEmpty = !isRefreshing && entries.length === 0;
+  // 빈 브리핑 필터링
+  const validEntries = entries.filter((e) => e.briefing && e.briefing.trim().length > 0);
+
+  // 날짜별 그룹핑
+  const groupedByDate = new Map<string, FeedEntry[]>();
+  for (const entry of validEntries) {
+    const dateKey = entry.periodEnd.split("T")[0];
+    const list = groupedByDate.get(dateKey) ?? [];
+    list.push(entry);
+    groupedByDate.set(dateKey, list);
+  }
+  const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
+
+  const isEmpty = !isRefreshing && validEntries.length === 0;
 
   return (
     <div className="space-y-4">
@@ -102,46 +115,53 @@ export function NewsfeedPanel({
         </div>
       )}
 
-      {/* 피드 카드 목록 */}
-      {entries.map((entry) => (
-        <div key={entry.id}>
-          <FeedCard
-            entry={entry}
-            scopeName={getScopeName(entry)}
-            onAddMilestone={onAddMilestone}
-          />
-          {/* 프로젝트 그룹핑 제안 배너 */}
-          {entry.groupSuggestion && (
-            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 p-3">
-              <p className="text-sm font-medium">
-                {entry.groupSuggestion.suggestion}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {entry.groupSuggestion.repositories
-                  .map((r) => r.name)
-                  .join(", ")}
-                을(를) 하나의 프로젝트로 묶을까요?
-              </p>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() =>
-                    onAcceptGroupSuggestion(entry.groupSuggestion!)
-                  }
-                >
-                  묶기
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onDismissGroupSuggestion(entry.id)}
-                >
-                  무시
-                </Button>
-              </div>
+      {/* 날짜별 그룹 피드 카드 */}
+      {sortedDates.map((dateKey) => (
+        <div key={dateKey} className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-1">
+            {formatDateLabel(dateKey)}
+          </p>
+          {groupedByDate.get(dateKey)!.map((entry) => (
+            <div key={entry.id}>
+              <FeedCard
+                entry={entry}
+                scopeName={getScopeName(entry)}
+                onAddMilestone={onAddMilestone}
+              />
+              {/* 프로젝트 그룹핑 제안 배너 */}
+              {entry.groupSuggestion && (
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 p-3">
+                  <p className="text-sm font-medium">
+                    {entry.groupSuggestion.suggestion}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {entry.groupSuggestion.repositories
+                      .map((r) => r.name)
+                      .join(", ")}
+                    을(를) 하나의 프로젝트로 묶을까요?
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() =>
+                        onAcceptGroupSuggestion(entry.groupSuggestion!)
+                      }
+                    >
+                      묶기
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDismissGroupSuggestion(entry.id)}
+                    >
+                      무시
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       ))}
 
@@ -231,4 +251,21 @@ export function NewsfeedPanel({
       )}
     </div>
   );
+}
+
+function formatDateLabel(dateKey: string): string {
+  const d = new Date(dateKey + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+
+  const formatted = d.toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+
+  if (diff === 0) return `오늘 — ${formatted}`;
+  if (diff === 1) return `어제 — ${formatted}`;
+  return formatted;
 }
