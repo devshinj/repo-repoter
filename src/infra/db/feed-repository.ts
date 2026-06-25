@@ -103,6 +103,27 @@ export function insertFeedEntry(
   return result.lastInsertRowid as number;
 }
 
+export function getLatestMilestoneSummary(
+  db: Database.Database,
+  userId: string,
+  scopeType: "project" | "repository",
+  scopeId: number
+): string | null {
+  const row = db
+    .prepare(
+      `
+    SELECT milestone_summary
+    FROM feed_entries
+    WHERE user_id = ? AND scope_type = ? AND scope_id = ? AND milestone_summary IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+    )
+    .get(userId, scopeType, scopeId) as { milestone_summary: string } | undefined;
+
+  return row?.milestone_summary ?? null;
+}
+
 export function getFeedEntries(
   db: Database.Database,
   userId: string,

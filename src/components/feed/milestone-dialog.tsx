@@ -11,9 +11,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Target } from "lucide-react";
+import { Loader2, Target, AlertTriangle } from "lucide-react";
 import { api } from "@/lib/api-url";
 import type { MilestoneParseResult } from "@/core/feed/briefing-prompt";
+import type { Milestone } from "@/core/project/project-types";
 
 interface MilestoneDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface MilestoneDialogProps {
   preselectedScope?: { type: "project" | "repository"; id: number; name: string } | null;
   projects: Array<{ id: number; name: string }>;
   repositories: Array<{ id: number; name: string }>;
+  existingMilestones?: Milestone[];
   onCreated: () => void;
 }
 
@@ -32,6 +34,7 @@ export function MilestoneDialog({
   preselectedScope,
   projects,
   repositories,
+  existingMilestones = [],
   onCreated,
 }: MilestoneDialogProps) {
   const [rawInput, setRawInput] = useState(initialRawInput);
@@ -40,6 +43,7 @@ export function MilestoneDialog({
   const [parseResult, setParseResult] = useState<MilestoneParseResult | null>(null);
   const [editedTitle, setEditedTitle] = useState("");
   const [editedDeadline, setEditedDeadline] = useState("");
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [selectedScope, setSelectedScope] = useState<{
     type: string;
     id: number;
@@ -57,18 +61,36 @@ export function MilestoneDialog({
       setParseResult(null);
       setEditedTitle("");
       setEditedDeadline("");
+      setDuplicateConfirmed(false);
     }
   }, [open, initialRawInput, preselectedScope]);
+
+  // title/scope 변경 시 중복 확인 리셋
+  useEffect(() => {
+    setDuplicateConfirmed(false);
+  }, [editedTitle, selectedScope]);
 
   function resetState() {
     setRawInput("");
     setParseResult(null);
     setEditedTitle("");
     setEditedDeadline("");
+    setDuplicateConfirmed(false);
     setSelectedScope(
       preselectedScope ? { type: preselectedScope.type, id: preselectedScope.id } : null
     );
   }
+
+  // 같은 scope + 유사 title의 active 마일스톤 검출
+  const duplicateMilestone = selectedScope && editedTitle.trim()
+    ? existingMilestones.find(
+        (m) =>
+          m.status === "active" &&
+          ((selectedScope.type === "project" && m.projectId === selectedScope.id) ||
+           (selectedScope.type === "repository" && m.repositoryId === selectedScope.id)) &&
+          m.title.trim().toLowerCase() === editedTitle.trim().toLowerCase()
+      )
+    : undefined;
 
   async function handleParse() {
     if (!rawInput.trim()) return;
@@ -224,6 +246,28 @@ export function MilestoneDialog({
                 </p>
               )}
             </div>
+            {duplicateMilestone && !duplicateConfirmed && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 p-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-xs">
+                  <p className="font-medium text-amber-800 dark:text-amber-300">
+                    동일한 마일스톤이 이미 있습니다
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                    &ldquo;{duplicateMilestone.title}&rdquo;
+                    {duplicateMilestone.deadline && ` (마감: ${duplicateMilestone.deadline})`}
+                  </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 mt-1 text-xs text-amber-700 dark:text-amber-400"
+                    onClick={() => setDuplicateConfirmed(true)}
+                  >
+                    그래도 추가하기
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -234,7 +278,7 @@ export function MilestoneDialog({
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={isCreating || !editedTitle.trim() || !selectedScope}
+              disabled={isCreating || !editedTitle.trim() || !selectedScope || (!!duplicateMilestone && !duplicateConfirmed)}
             >
               {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               설정 완료

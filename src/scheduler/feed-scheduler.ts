@@ -11,10 +11,11 @@ import {
   getUnprocessedRssCommits,
   insertFeedEntry,
   markRssCommitsProcessed,
+  getLatestMilestoneSummary,
 } from "@/infra/db/feed-repository";
 import { getRepositoryProjectId } from "@/infra/db/project-repository";
 import { getActiveMilestonesByScope } from "@/infra/db/milestone-repository";
-import { buildBriefingPrompt, type LogicraftActivity } from "@/core/feed/briefing-prompt";
+import { buildBriefingPrompt, buildMilestoneSummaryPrompt, type LogicraftActivity } from "@/core/feed/briefing-prompt";
 import { generateText } from "@/infra/llm/llm-client";
 import { listItems, activityItemTypes } from "@/infra/logicraft/logicraft-client";
 import { getLogicraftApiKey } from "@/infra/db/logicraft";
@@ -122,15 +123,25 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       .prepare("SELECT name FROM projects WHERE id = ?")
       .get(projectId) as { name: string } | undefined;
     const milestones = getActiveMilestonesByScope(db, "project", projectId);
+    const previousSummary = getLatestMilestoneSummary(db, userId, "project", projectId) ?? undefined;
     const prompt = buildBriefingPrompt({
       scopeName: project?.name ?? "Unknown",
       commits: allCommits,
       milestones,
+      previousMilestoneSummary: previousSummary,
       logicraftActivities,
     });
     const briefing = await generateText(prompt);
 
-    const milestoneSummary = milestones.length > 0 ? extractMilestoneSummary(briefing) : null;
+    let milestoneSummary: string | null = null;
+    if (milestones.length > 0) {
+      const summaryPrompt = buildMilestoneSummaryPrompt({
+        milestones,
+        commits: allCommits,
+        previousSummary,
+      });
+      milestoneSummary = await generateText(summaryPrompt);
+    }
     const shas = allCommits.map((c) => c.sha);
     const dates = allCommits.map((c) => c.committedAt).sort();
 
@@ -165,10 +176,19 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
     const repo = repos.find((r: { id: number }) => r.id === repoId);
     const scopeName = repo ? (repo.label || `${repo.owner}/${repo.repo}`) : "Unknown";
     const milestones = getActiveMilestonesByScope(db, "repository", repoId);
-    const prompt = buildBriefingPrompt({ scopeName, commits, milestones, logicraftActivities });
+    const previousSummary = getLatestMilestoneSummary(db, userId, "repository", repoId) ?? undefined;
+    const prompt = buildBriefingPrompt({ scopeName, commits, milestones, previousMilestoneSummary: previousSummary, logicraftActivities });
     const briefing = await generateText(prompt);
 
-    const milestoneSummary = milestones.length > 0 ? extractMilestoneSummary(briefing) : null;
+    let milestoneSummary: string | null = null;
+    if (milestones.length > 0) {
+      const summaryPrompt = buildMilestoneSummaryPrompt({
+        milestones,
+        commits,
+        previousSummary,
+      });
+      milestoneSummary = await generateText(summaryPrompt);
+    }
     const shas = commits.map((c) => c.sha);
     const dates = commits.map((c) => c.committedAt).sort();
 
@@ -278,18 +298,3 @@ function getRecentCacheAsRss(db: Database.Database, repositoryId: number): RssCo
   }));
 }
 
-/**
- * 브리핑의 첫 단락을 마일스톤 요약으로 추출한다.
- * 빈 줄을 만나면 첫 단락이 끝난 것으로 간주한다.
- */
-export function extractMilestoneSummary(briefing: string): string | null {
-  const trimmed = briefing.trim();
-  if (!trimmed) return null;
-  const lines = trimmed.split("\n");
-  const summaryLines: string[] = [];
-  for (const line of lines) {
-    if (summaryLines.length > 0 && line.trim() === "") break;
-    summaryLines.push(line);
-  }
-  return summaryLines.length > 0 ? summaryLines.join("\n") : null;
-}

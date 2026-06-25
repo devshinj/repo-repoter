@@ -135,6 +135,36 @@ export function updateMilestone(
   db.prepare(`UPDATE milestones SET ${updates.join(", ")} WHERE id = ?`).run(...values);
 }
 
+export function getMilestoneById(
+  db: Database.Database,
+  id: number
+): Milestone | null {
+  const row = db
+    .prepare(
+      `
+    SELECT
+      id, user_id as userId, project_id as projectId, repository_id as repositoryId,
+      title, raw_input as rawInput, deadline, status, created_at as createdAt, updated_at as updatedAt
+    FROM milestones
+    WHERE id = ?
+  `
+    )
+    .get(id) as {
+    id: number;
+    userId: string;
+    projectId?: number;
+    repositoryId?: number;
+    title: string;
+    rawInput?: string;
+    deadline?: string;
+    status: "active" | "completed" | "cancelled";
+    createdAt: string;
+    updatedAt: string;
+  } | undefined;
+
+  return row ? mapMilestone(row) : null;
+}
+
 export function deleteMilestone(db: Database.Database, id: number): void {
   db.prepare("DELETE FROM milestones WHERE id = ?").run(id);
 }

@@ -12,6 +12,7 @@ export interface BriefingPromptInput {
   scopeName: string;
   commits: RssCommit[];
   milestones: Milestone[];
+  previousMilestoneSummary?: string;
   logicraftActivities?: LogicraftActivity[];
 }
 
@@ -27,7 +28,7 @@ export interface MilestoneParseResult {
 }
 
 export function buildBriefingPrompt(input: BriefingPromptInput): string {
-  const { scopeName, commits, milestones, logicraftActivities } = input;
+  const { scopeName, commits, milestones, previousMilestoneSummary, logicraftActivities } = input;
 
   // 작업자별 그룹핑
   const byAuthor = new Map<string, RssCommit[]>();
@@ -56,6 +57,11 @@ export function buildBriefingPrompt(input: BriefingPromptInput): string {
           .join("\n")}\n`
       : "";
 
+  const previousMilestoneSection =
+    previousMilestoneSummary
+      ? `\n[이전 마일스톤 현황]\n${previousMilestoneSummary}\n`
+      : "";
+
   const logicraftSection =
     logicraftActivities && logicraftActivities.length > 0
       ? `\n[설계 산출물 변경 (LogiCraft)]\n${logicraftActivities
@@ -67,20 +73,58 @@ export function buildBriefingPrompt(input: BriefingPromptInput): string {
 
 [프로젝트/저장소]
 ${scopeName}
-${milestoneSection}
+${milestoneSection}${previousMilestoneSection}
 [커밋 목록 — 작업자별]
 ${authorSections}
 ${logicraftSection}
 [출력 규칙]
-${
-  milestones.length > 0
-    ? `1. 마일스톤 상태를 먼저 한 줄씩 정리 (상태: 개발 중/수정·보완/활동 없음/지연 위험). 마감일 있으면 남은 일수 표기.
-2. 이후 핵심 변경사항을 bullet으로 요약.`
-    : `핵심 변경사항을 bullet으로 요약.`
-}
+핵심 변경사항을 bullet으로 요약.
 ${logicraftActivities && logicraftActivities.length > 0 ? "- 설계 산출물 변경도 함께 요약에 포함." : ""}
 - 인사말·감상·칭찬·격려 금지. 사실 위주 간결체.
 - 3~5줄 이내로 핵심만. 커밋 메시지를 그대로 나열하지 말고 의미 단위로 묶어서 요약.
+- 텍스트만 응답 (JSON/코드블록 불필요)
+- 한국어로 작성`;
+}
+
+export interface MilestoneSummaryInput {
+  milestones: Milestone[];
+  commits: RssCommit[];
+  previousSummary?: string;
+}
+
+export function buildMilestoneSummaryPrompt(input: MilestoneSummaryInput): string {
+  const { milestones, commits, previousSummary } = input;
+
+  const milestoneLines = milestones
+    .map((m) => {
+      const deadline = m.deadline ? ` (마감: ${m.deadline})` : "";
+      return `- ${m.title}${deadline}`;
+    })
+    .join("\n");
+
+  const commitLines = commits
+    .slice(0, 30)
+    .map((c) => `- ${c.message}`)
+    .join("\n");
+
+  const previousSection = previousSummary
+    ? `\n[이전 현황]\n${previousSummary}\n`
+    : "";
+
+  return `각 마일스톤의 현재 상태를 판단하세요.
+
+[활성 마일스톤]
+${milestoneLines}
+${previousSection}
+[최근 커밋]
+${commitLines}
+
+[출력 규칙]
+- 마일스톤별로 한 줄씩 상태 정리.
+- 상태: 개발 중 / 수정·보완 / 활동 없음 / 지연 위험 / 완료 근접
+- 마감일 있으면 남은 일수 표기.
+- 이전 현황이 있으면 변화(진전/정체/후퇴)를 반영.
+- 인사말·감상 금지. 사실만 간결하게.
 - 텍스트만 응답 (JSON/코드블록 불필요)
 - 한국어로 작성`;
 }

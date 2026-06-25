@@ -10,7 +10,7 @@ import { api } from "@/lib/api-url";
 import { calcStreak, calcInactiveDays } from "@/components/growth-tree/hooks/use-tree-metrics";
 import type { TreeMetrics, DashboardStats } from "@/core/types";
 import type { FeedEntry, GroupSuggestion } from "@/core/feed/feed-types";
-import type { Project } from "@/core/project/project-types";
+import type { Project, Milestone } from "@/core/project/project-types";
 
 // ---------------------------------------------------------------------------
 // Utility helpers (KST-aware date/time formatting)
@@ -91,6 +91,7 @@ export default function DashboardPage() {
   // Feed state (refresh-on-mount, not polling)
   const [feedEntries, setFeedEntries] = useState<FeedEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Milestone dialog state
@@ -164,16 +165,19 @@ export default function DashboardPage() {
     const loadFeed = async () => {
       try {
         // 1. 캐시된 데이터 즉시 표시
-        const [feedRes, projectsRes] = await Promise.all([
+        const [feedRes, projectsRes, milestonesRes] = await Promise.all([
           fetch(api("/feed")),
           fetch(api("/projects")),
+          fetch(api("/milestones")),
         ]);
-        const [feedData, projectsData] = await Promise.all([
+        const [feedData, projectsData, milestonesData] = await Promise.all([
           feedRes.json(),
           projectsRes.json(),
+          milestonesRes.json(),
         ]);
         setFeedEntries(Array.isArray(feedData) ? feedData : feedData.entries ?? []);
         setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
+        setMilestones(Array.isArray(milestonesData) ? milestonesData : []);
       } catch {
         // Feed errors are non-critical — don't set syncError
       } finally {
@@ -228,16 +232,19 @@ export default function DashboardPage() {
   // ---------------------------------------------------------------------------
   const refreshFeed = useCallback(async () => {
     try {
-      const [feedRes, projectsRes] = await Promise.all([
+      const [feedRes, projectsRes, milestonesRes] = await Promise.all([
         fetch(api("/feed")),
         fetch(api("/projects")),
+        fetch(api("/milestones")),
       ]);
-      const [feedData, projectsData] = await Promise.all([
+      const [feedData, projectsData, milestonesData] = await Promise.all([
         feedRes.json(),
         projectsRes.json(),
+        milestonesRes.json(),
       ]);
       setFeedEntries(Array.isArray(feedData) ? feedData : feedData.entries ?? []);
       setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
+      setMilestones(Array.isArray(milestonesData) ? milestonesData : []);
     } catch {
       // Feed errors are non-critical
     }
@@ -247,8 +254,8 @@ export default function DashboardPage() {
   // Event handlers
   // ---------------------------------------------------------------------------
   const handleAddMilestone = useCallback(
-    (scopeType: "project" | "repository", scopeId: number, rawInput?: string) => {
-      if (scopeId === -1) {
+    (scopeType: "project" | "repository", scopeId: number | null, rawInput?: string) => {
+      if (scopeId === null) {
         // Opened from top input bar — use raw text as initial input, no preselected scope
         setMilestoneInitialInput(rawInput ?? "");
         setMilestonePreselectedScope(null);
@@ -334,8 +341,10 @@ export default function DashboardPage() {
           <NewsfeedPanel
             entries={feedEntries}
             scopeNames={scopeNames}
+            milestones={milestones}
             isRefreshing={isRefreshing}
             onAddMilestone={handleAddMilestone}
+            onMilestoneChanged={refreshFeed}
             onAcceptGroupSuggestion={handleAcceptGroupSuggestion}
             onDismissGroupSuggestion={handleDismissGroupSuggestion}
           />
@@ -350,6 +359,7 @@ export default function DashboardPage() {
         preselectedScope={milestonePreselectedScope}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         repositories={repos.map((r) => ({ id: r.id, name: `${r.owner}/${r.repo}` }))}
+        existingMilestones={milestones}
         onCreated={refreshFeed}
       />
     </div>

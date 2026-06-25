@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Target, Loader2, Rss, Sparkles, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { FeedEntry, GroupSuggestion } from "@/core/feed/feed-types";
+import type { Milestone } from "@/core/project/project-types";
 
 interface NewsfeedPanelProps {
   entries: FeedEntry[];
   scopeNames: Map<string, string>; // "project:1" → "MyProject"
+  milestones?: Milestone[];
   isRefreshing: boolean;
-  onAddMilestone: (scopeType: "project" | "repository", scopeId: number, rawInput?: string) => void;
+  onAddMilestone: (scopeType: "project" | "repository", scopeId: number | null, rawInput?: string) => void;
+  onMilestoneChanged?: () => void;
   onAcceptGroupSuggestion: (suggestion: GroupSuggestion) => void;
   onDismissGroupSuggestion: (entryId: number) => void;
 }
@@ -20,8 +23,10 @@ interface NewsfeedPanelProps {
 export function NewsfeedPanel({
   entries,
   scopeNames,
+  milestones = [],
   isRefreshing,
   onAddMilestone,
+  onMilestoneChanged,
   onAcceptGroupSuggestion,
   onDismissGroupSuggestion,
 }: NewsfeedPanelProps) {
@@ -92,7 +97,7 @@ export function NewsfeedPanel({
                 disabled={!milestoneInput.trim()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddMilestone("project", -1, milestoneInput);
+                  onAddMilestone("project", null, milestoneInput);
                 }}
               >
                 설정하기
@@ -126,7 +131,9 @@ export function NewsfeedPanel({
               <FeedCard
                 entry={entry}
                 scopeName={getScopeName(entry)}
+                milestones={milestones}
                 onAddMilestone={onAddMilestone}
+                onMilestoneChanged={onMilestoneChanged}
               />
               {/* 프로젝트 그룹핑 제안 배너 */}
               {entry.groupSuggestion && (

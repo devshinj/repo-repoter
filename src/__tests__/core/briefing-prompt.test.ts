@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildBriefingPrompt,
+  buildMilestoneSummaryPrompt,
   buildMilestoneParsePrompt,
   parseMilestoneParseResponse,
   buildGroupSuggestionPrompt,
@@ -39,7 +40,6 @@ describe("buildBriefingPrompt", () => {
       id: 1,
       userId: "u1",
       projectId: 1,
-      repositoryId: null,
       title: "MVP 출시",
       rawInput: "다음달까지 MVP",
       deadline: "2026-07-05",
@@ -62,6 +62,109 @@ describe("buildBriefingPrompt", () => {
     });
     expect(prompt).toContain("MVP 출시");
     expect(prompt).toContain("2026-07-05");
+  });
+
+  it("should include previous milestone summary when provided", () => {
+    const prompt = buildBriefingPrompt({
+      scopeName: "MyProject",
+      commits: [
+        {
+          repositoryId: 1,
+          sha: "a1",
+          authorName: "x",
+          message: "m",
+          committedAt: "2026-06-23T10:00:00Z",
+        },
+      ],
+      milestones: [],
+      previousMilestoneSummary: "MVP 출시: 개발 중 (마감 15일 남음)",
+    });
+    expect(prompt).toContain("[이전 마일스톤 현황]");
+    expect(prompt).toContain("MVP 출시: 개발 중 (마감 15일 남음)");
+  });
+
+  it("should not include previous milestone section when not provided", () => {
+    const prompt = buildBriefingPrompt({
+      scopeName: "MyProject",
+      commits: [
+        {
+          repositoryId: 1,
+          sha: "a1",
+          authorName: "x",
+          message: "m",
+          committedAt: "2026-06-23T10:00:00Z",
+        },
+      ],
+      milestones: [],
+    });
+    expect(prompt).not.toContain("[이전 마일스톤 현황]");
+  });
+});
+
+describe("buildMilestoneSummaryPrompt", () => {
+  it("should include milestone titles and deadlines", () => {
+    const prompt = buildMilestoneSummaryPrompt({
+      milestones: [
+        {
+          id: 1,
+          userId: "u1",
+          projectId: 1,
+          title: "MVP 출시",
+          deadline: "2026-07-05",
+          status: "active",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      commits: [
+        {
+          repositoryId: 1,
+          sha: "a1",
+          authorName: "x",
+          message: "feat: 로그인 구현",
+          committedAt: "2026-06-23T10:00:00Z",
+        },
+      ],
+    });
+    expect(prompt).toContain("MVP 출시");
+    expect(prompt).toContain("2026-07-05");
+    expect(prompt).toContain("feat: 로그인 구현");
+  });
+
+  it("should include previous summary when provided", () => {
+    const prompt = buildMilestoneSummaryPrompt({
+      milestones: [
+        {
+          id: 1,
+          userId: "u1",
+          title: "MVP 출시",
+          status: "active",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      commits: [],
+      previousSummary: "MVP 출시: 개발 중",
+    });
+    expect(prompt).toContain("[이전 현황]");
+    expect(prompt).toContain("MVP 출시: 개발 중");
+  });
+
+  it("should not include previous section when no previous summary", () => {
+    const prompt = buildMilestoneSummaryPrompt({
+      milestones: [
+        {
+          id: 1,
+          userId: "u1",
+          title: "MVP 출시",
+          status: "active",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      commits: [],
+    });
+    expect(prompt).not.toContain("[이전 현황]");
   });
 });
 
