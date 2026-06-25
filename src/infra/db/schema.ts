@@ -50,6 +50,9 @@ export function createTables(db: Database.Database): void {
       date TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      date_start TEXT,
+      date_end TEXT,
+      status TEXT NOT NULL DEFAULT 'completed',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -89,9 +92,6 @@ export function createTables(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_sync_logs_repo_completed
       ON sync_logs(repository_id, completed_at DESC);
-
-    CREATE INDEX IF NOT EXISTS idx_sync_logs_user_status
-      ON sync_logs(user_id, status, completed_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_reports_user_created
       ON reports(user_id, created_at DESC);
@@ -267,6 +267,10 @@ export function migrateSchema(db: Database.Database): void {
 
   if (!userColumnNames.includes("provider") || (passwordCol && passwordCol.notnull === 1)) {
     // password_hash NOT NULL → nullable 변경은 ALTER로 불가하므로 테이블 재생성
+    const hasIsActive = userColumnNames.includes("is_active");
+    const isActiveDef = hasIsActive ? "is_active INTEGER NOT NULL DEFAULT 1," : "";
+    const isActiveCol = hasIsActive ? ", is_active" : "";
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS users_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -275,10 +279,11 @@ export function migrateSchema(db: Database.Database): void {
         password_hash TEXT,
         provider TEXT NOT NULL DEFAULT 'credentials',
         provider_account_id TEXT,
+        ${isActiveDef}
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT OR IGNORE INTO users_new (id, name, email, password_hash, created_at)
-        SELECT id, name, email, password_hash, created_at FROM users;
+      INSERT OR IGNORE INTO users_new (id, name, email, password_hash${isActiveCol}, created_at)
+        SELECT id, name, email, password_hash${isActiveCol}, created_at FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
     `);
@@ -300,6 +305,9 @@ export function migrateSchema(db: Database.Database): void {
   if (!repoColumnNames.includes("git_author")) {
     db.exec("ALTER TABLE repositories ADD COLUMN git_author TEXT");
   }
+  if (!repoColumnNames.includes("sync_status")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
+  }
 
   const syncColumns = db.prepare("PRAGMA table_info(sync_logs)").all() as any[];
   const syncColumnNames = syncColumns.map((c: any) => c.name);
@@ -307,6 +315,8 @@ export function migrateSchema(db: Database.Database): void {
   if (!syncColumnNames.includes("user_id")) {
     db.exec("ALTER TABLE sync_logs ADD COLUMN user_id TEXT NOT NULL DEFAULT ''");
   }
+  // sync_logs user_id 인덱스 (컬럼 존재 보장 후 생성)
+  db.exec("CREATE INDEX IF NOT EXISTS idx_sync_logs_user_status ON sync_logs(user_id, status, completed_at DESC)");
 
   // user_credentials UNIQUE(user_id, provider) 제약 제거 — 다중 자격증명 허용
   const credIndexInfo = db.prepare(
@@ -385,6 +395,16 @@ export function migrateSchema(db: Database.Database): void {
   const repoIdCol = cacheColumns.find((c: any) => c.name === "repository_id");
 
   if (shaCol?.pk === 1 && repoIdCol?.pk === 0) {
+    // 기존 테이블에 additions/deletions/files_changed가 있을 수 있으므로 보존
+    const cacheColNames = cacheColumns.map((c: any) => c.name);
+    const hasAdditions = cacheColNames.includes("additions");
+    const extraCols = hasAdditions ? ", additions, deletions, files_changed" : "";
+    const extraDefs = hasAdditions
+      ? `additions INTEGER NOT NULL DEFAULT 0,
+        deletions INTEGER NOT NULL DEFAULT 0,
+        files_changed TEXT,`
+      : "";
+
     db.exec(`
       CREATE TABLE commit_cache_new (
         repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
@@ -394,16 +414,30 @@ export function migrateSchema(db: Database.Database): void {
         message TEXT NOT NULL,
         committed_date TEXT NOT NULL,
         committed_at TEXT NOT NULL,
+        ${extraDefs}
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY (repository_id, sha)
       );
-      INSERT INTO commit_cache_new (repository_id, sha, branch, author, message, committed_date, committed_at, created_at)
-        SELECT repository_id, sha, branch, author, message, committed_date, committed_at, created_at FROM commit_cache;
+      INSERT INTO commit_cache_new (repository_id, sha, branch, author, message, committed_date, committed_at${extraCols}, created_at)
+        SELECT repository_id, sha, branch, author, message, committed_date, committed_at${extraCols}, created_at FROM commit_cache;
       DROP TABLE commit_cache;
       ALTER TABLE commit_cache_new RENAME TO commit_cache;
       CREATE INDEX IF NOT EXISTS idx_commit_cache_repo_date
         ON commit_cache(repository_id, committed_date);
     `);
+  }
+
+  // commit_cache: additions/deletions/files_changed 컬럼 추가 (PK 마이그레이션 이후 누락 보완)
+  const latestCacheColumns = db.prepare("PRAGMA table_info(commit_cache)").all() as any[];
+  const latestCacheColNames = latestCacheColumns.map((c: any) => c.name);
+  if (!latestCacheColNames.includes("additions")) {
+    db.exec("ALTER TABLE commit_cache ADD COLUMN additions INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!latestCacheColNames.includes("deletions")) {
+    db.exec("ALTER TABLE commit_cache ADD COLUMN deletions INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!latestCacheColNames.includes("files_changed")) {
+    db.exec("ALTER TABLE commit_cache ADD COLUMN files_changed TEXT");
   }
 
   // user_credentials: 기존 git credential에 GitHub 기본 metadata 적용
@@ -422,11 +456,17 @@ export function migrateSchema(db: Database.Database): void {
     }
   }
 
-  // hrms_api_keys: hrms_user_id 컬럼 추가
+  // hrms_api_keys: 누락 컬럼 추가
   const hrmsKeyColumns = db.prepare("PRAGMA table_info(hrms_api_keys)").all() as any[];
   const hrmsKeyColumnNames = hrmsKeyColumns.map((c: any) => c.name);
   if (hrmsKeyColumns.length > 0 && !hrmsKeyColumnNames.includes("hrms_user_id")) {
     db.exec("ALTER TABLE hrms_api_keys ADD COLUMN hrms_user_id TEXT");
+  }
+  if (hrmsKeyColumns.length > 0 && !hrmsKeyColumnNames.includes("hrms_user_name")) {
+    db.exec("ALTER TABLE hrms_api_keys ADD COLUMN hrms_user_name TEXT");
+  }
+  if (hrmsKeyColumns.length > 0 && !hrmsKeyColumnNames.includes("scopes")) {
+    db.exec("ALTER TABLE hrms_api_keys ADD COLUMN scopes TEXT");
   }
 
   // hrms_task_logs: 인덱스에 status 포함으로 교체
