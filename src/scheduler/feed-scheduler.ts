@@ -1,5 +1,6 @@
 // src/scheduler/feed-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
+import Database from "better-sqlite3";
 import { kstCronOptions } from "@/core/date-utils";
 import { getDb } from "@/infra/db/connection";
 import { getActiveUsersWithRepos, getRepositoriesByUser } from "@/infra/db/repository";
@@ -49,6 +50,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
   let newEntries = 0;
 
   // Step 1: RSS 수집 — 전 저장소 RSS fetch → rss_commits에 저장
+  //         RSS 실패(private 저장소 등) 시 commit_cache fallback
   for (const repo of repos) {
     try {
       const meta = resolveProviderMeta(repo);
@@ -62,6 +64,12 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       );
       if (result.commits.length > 0) {
         insertRssCommits(db, result.commits);
+      } else {
+        // RSS에서 커밋을 못 가져온 경우 commit_cache fallback
+        const cacheCommits = getRecentCacheAsRss(db, repo.id);
+        if (cacheCommits.length > 0) {
+          insertRssCommits(db, cacheCommits);
+        }
       }
       // 브랜치 자동 교정: 404 fallback으로 다른 브랜치에서 성공한 경우 DB 업데이트
       if (result.correctedBranch) {
@@ -70,6 +78,13 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       }
     } catch (err) {
       console.warn(`[FeedScheduler] RSS fetch failed for repo ${repo.id}:`, err);
+      // RSS 자체가 예외인 경우에도 commit_cache fallback
+      try {
+        const cacheCommits = getRecentCacheAsRss(db, repo.id);
+        if (cacheCommits.length > 0) {
+          insertRssCommits(db, cacheCommits);
+        }
+      } catch { /* fallback도 실패하면 무시 */ }
     }
   }
 
@@ -184,6 +199,32 @@ function resolveProviderMeta(repo: {
   } catch {
     return null;
   }
+}
+
+/**
+ * commit_cache에서 rss_commits에 아직 없는 최근 커밋을 RssCommit 형태로 변환.
+ * private 저장소 등 RSS 접근 불가 시 fallback으로 사용.
+ */
+function getRecentCacheAsRss(db: Database.Database, repositoryId: number): RssCommit[] {
+  const rows = db.prepare(`
+    SELECT cc.sha, cc.author, cc.message, cc.committed_at
+    FROM commit_cache cc
+    WHERE cc.repository_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM rss_commits rc
+        WHERE rc.repository_id = cc.repository_id AND rc.sha = cc.sha
+      )
+    ORDER BY cc.committed_at DESC
+    LIMIT 50
+  `).all(repositoryId) as { sha: string; author: string; message: string; committed_at: string }[];
+
+  return rows.map((r) => ({
+    repositoryId,
+    sha: r.sha,
+    authorName: r.author,
+    message: r.message,
+    committedAt: r.committed_at,
+  }));
 }
 
 /**
