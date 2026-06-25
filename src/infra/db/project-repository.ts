@@ -159,6 +159,8 @@ export function updateProject(
 }
 
 export function deleteProject(db: Database.Database, id: number): void {
+  db.prepare("DELETE FROM feed_entries WHERE scope_type = 'project' AND scope_id = ?").run(id);
+  db.prepare("DELETE FROM milestones WHERE project_id = ?").run(id);
   db.prepare("DELETE FROM projects WHERE id = ?").run(id);
   // project_repositories cascade deletes via FK
 }

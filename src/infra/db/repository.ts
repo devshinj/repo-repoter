@@ -91,6 +91,8 @@ export function updateLastSyncedSha(db: Database.Database, id: number, sha: stri
 }
 
 export function deleteRepository(db: Database.Database, id: number): void {
+  db.prepare("DELETE FROM feed_entries WHERE scope_type = 'repository' AND scope_id = ?").run(id);
+  db.prepare("DELETE FROM rss_commits WHERE repository_id = ?").run(id);
   db.prepare("DELETE FROM repositories WHERE id = ?").run(id);
 }
 
@@ -194,6 +196,8 @@ export function getRepositoryByIdAndUser(db: Database.Database, id: number, user
 }
 
 export function deleteRepositoryForUser(db: Database.Database, id: number, userId: string): boolean {
+  db.prepare("DELETE FROM feed_entries WHERE scope_type = 'repository' AND scope_id = ? AND user_id = ?").run(id, userId);
+  db.prepare("DELETE FROM rss_commits WHERE repository_id = ?").run(id);
   const result = db.prepare(
     "DELETE FROM repositories WHERE id = ? AND user_id = ?"
   ).run(id, userId);

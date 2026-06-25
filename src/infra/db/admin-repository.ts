@@ -68,6 +68,9 @@ export function deleteUser(db: Database.Database, userId: number): void {
     db.prepare("DELETE FROM hrms_api_keys WHERE user_id = ?").run(userIdStr);
     db.prepare("DELETE FROM logicraft_api_keys WHERE user_id = ?").run(userIdStr);
     db.prepare("DELETE FROM user_credentials WHERE user_id = ?").run(userIdStr);
+    db.prepare("DELETE FROM feed_entries WHERE user_id = ?").run(userIdStr);
+    db.prepare("DELETE FROM rss_commits WHERE repository_id IN (SELECT id FROM repositories WHERE user_id = ?)").run(userIdStr);
+    db.prepare("DELETE FROM milestones WHERE user_id = ?").run(userIdStr);
     db.prepare("DELETE FROM repositories WHERE user_id = ?").run(userIdStr);
     db.prepare("DELETE FROM users WHERE id = ?").run(userId);
   });
