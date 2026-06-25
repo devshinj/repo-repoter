@@ -240,10 +240,21 @@ export function MappingCard({ mapping, projectStatus, statusLabel, activeJobId, 
                   <GitBranch className="h-2.5 w-2.5" />
                   {mapping.repos.length}개 저장소
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
-                  {mapping.auto_register ? <Zap className="h-2.5 w-2.5" /> : <Hand className="h-2.5 w-2.5" />}
-                  {mapping.auto_register ? `자동 ${mapping.cron_time}` : "수동"}
-                </span>
+                {mapping.auto_register ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 to-orange-500/10 dark:from-amber-500/25 dark:to-orange-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-400/30 dark:ring-amber-400/20">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    </span>
+                    <Zap className="h-2.5 w-2.5" />
+                    매일 {mapping.cron_time} 자동 등록
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground bg-white/40 dark:bg-white/5">
+                    <Hand className="h-2.5 w-2.5" />
+                    수동
+                  </span>
+                )}
               </div>
             </div>
           </div>
