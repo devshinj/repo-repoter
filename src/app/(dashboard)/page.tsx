@@ -195,7 +195,7 @@ export default function DashboardPage() {
     scopeNames.set(`project:${project.id}`, project.name);
   }
   for (const repo of repos) {
-    scopeNames.set(`repository:${repo.id}`, `${repo.owner}/${repo.repo}`);
+    scopeNames.set(`repository:${repo.id}`, repo.label || `${repo.owner}/${repo.repo}`);
   }
 
   // ---------------------------------------------------------------------------

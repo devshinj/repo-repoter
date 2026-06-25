@@ -2,10 +2,17 @@ import type { RssCommit } from "@/core/feed/feed-types";
 import type { GroupSuggestion } from "@/core/feed/feed-types";
 import type { Milestone } from "@/core/project/project-types";
 
+export interface LogicraftActivity {
+  type: string;
+  title: string;
+  updatedAt: string;
+}
+
 export interface BriefingPromptInput {
   scopeName: string;
   commits: RssCommit[];
   milestones: Milestone[];
+  logicraftActivities?: LogicraftActivity[];
 }
 
 export interface MilestoneParseResult {
@@ -20,7 +27,7 @@ export interface MilestoneParseResult {
 }
 
 export function buildBriefingPrompt(input: BriefingPromptInput): string {
-  const { scopeName, commits, milestones } = input;
+  const { scopeName, commits, milestones, logicraftActivities } = input;
 
   // 작업자별 그룹핑
   const byAuthor = new Map<string, RssCommit[]>();
@@ -49,23 +56,31 @@ export function buildBriefingPrompt(input: BriefingPromptInput): string {
           .join("\n")}\n`
       : "";
 
-  return `당신은 개발팀의 업무 현황을 브리핑하는 어시스턴트입니다.
-친절하고 명확한 비즈니스 톤으로, 구어체로 설명하세요.
-작업자별로 분류하여 누가 무엇을 하고 있는지 정리하세요.
+  const logicraftSection =
+    logicraftActivities && logicraftActivities.length > 0
+      ? `\n[설계 산출물 변경 (LogiCraft)]\n${logicraftActivities
+          .map((a) => `- [${a.type}] ${a.title} (${a.updatedAt})`)
+          .join("\n")}\n`
+      : "";
+
+  return `업무 현황 브리핑을 작성하세요.
 
 [프로젝트/저장소]
 ${scopeName}
 ${milestoneSection}
 [커밋 목록 — 작업자별]
 ${authorSections}
-
-[출력 지시]
+${logicraftSection}
+[출력 규칙]
 ${
   milestones.length > 0
-    ? `1. 마일스톤 상태 분석을 먼저 작성하세요. 각 마일스톤에 대해 커밋 활동을 분석하여 상태(미착수/개발 중/수정·보완/활동 없음/지연 위험)를 판단하세요. 마감일이 있으면 남은 일수를 언급하세요.
-2. 이후 작업자별 활동 요약을 작성하세요.`
-    : `작업자별 활동 요약을 작성하세요.`
+    ? `1. 마일스톤 상태를 먼저 한 줄씩 정리 (상태: 개발 중/수정·보완/활동 없음/지연 위험). 마감일 있으면 남은 일수 표기.
+2. 이후 핵심 변경사항을 bullet으로 요약.`
+    : `핵심 변경사항을 bullet으로 요약.`
 }
+${logicraftActivities && logicraftActivities.length > 0 ? "- 설계 산출물 변경도 함께 요약에 포함." : ""}
+- 인사말·감상·칭찬·격려 금지. 사실 위주 간결체.
+- 3~5줄 이내로 핵심만. 커밋 메시지를 그대로 나열하지 말고 의미 단위로 묶어서 요약.
 - 텍스트만 응답 (JSON/코드블록 불필요)
 - 한국어로 작성`;
 }
