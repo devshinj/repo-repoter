@@ -83,7 +83,7 @@ export default function DashboardPage() {
   // Stats & heatmap (60-second polling)
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [heatmapData, setHeatmapData] = useState<Record<string, number>>({});
-  const [repos, setRepos] = useState<Array<{ id: number; owner: string; repo: string; primary_language: string | null }>>([]);
+  const [repos, setRepos] = useState<Array<{ id: number; owner: string; repo: string; primary_language: string | null; label?: string }>>([]);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
