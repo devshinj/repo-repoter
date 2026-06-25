@@ -74,6 +74,11 @@ export function insertFeedEntry(
     periodEnd: string;
   }
 ): number {
+  // 같은 scope의 이전 브리핑 삭제 (scope당 최신 1개만 유지)
+  db.prepare(
+    "DELETE FROM feed_entries WHERE user_id = ? AND scope_type = ? AND scope_id = ?"
+  ).run(input.userId, input.scopeType, input.scopeId);
+
   const result = db
     .prepare(
       `
