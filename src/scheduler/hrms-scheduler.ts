@@ -38,11 +38,6 @@ async function executeRegistration(mappingId: number): Promise<void> {
 
   const date = getYesterdayDate();
 
-  if (hasSuccessLog(db, mappingId, date)) {
-    console.log(`[HrmsScheduler] mapping=${mappingId}: already registered for ${date}, skipping`);
-    return;
-  }
-
   const keyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
   if (!keyRow) {
     insertTaskLog(db, {
@@ -53,6 +48,26 @@ async function executeRegistration(mappingId: number): Promise<void> {
     });
     console.error(`[HrmsScheduler] mapping=${mappingId}: no API key for user`);
     return;
+  }
+
+  // 중복 체크: 로컬 성공 로그 + HRMS 실제 존재 여부 모두 확인
+  if (hasSuccessLog(db, mappingId, date)) {
+    try {
+      const hrmsApiKey = decrypt(keyRow.encrypted_key);
+      const tasks = await listTasks(hrmsApiKey, {
+        projectId: mapping.hrms_project_id,
+        dueFrom: date,
+        dueTo: date,
+      });
+      if (tasks.length > 0) {
+        console.log(`[HrmsScheduler] mapping=${mappingId}: already registered for ${date}, skipping`);
+        return;
+      }
+      console.log(`[HrmsScheduler] mapping=${mappingId}: local log exists for ${date} but not in HRMS, re-registering`);
+    } catch {
+      console.log(`[HrmsScheduler] mapping=${mappingId}: already registered for ${date}, skipping (HRMS check failed)`);
+      return;
+    }
   }
 
   // ── 동기화 단계: 최근 5분 이내 동기화 안 된 저장소만 sync ──
@@ -262,11 +277,6 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
 
   const date = getYesterdayDate();
 
-  if (hasLogicraftSuccessLog(db, mappingId, date)) {
-    console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: already registered for ${date}, skipping`);
-    return;
-  }
-
   const logicraftKeyRow = getLogicraftApiKey(db, mapping.user_id);
   const hrmsKeyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
 
@@ -277,6 +287,25 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
 
   const logicraftApiKey = decrypt(logicraftKeyRow.encrypted_key);
   const hrmsApiKey = decrypt(hrmsKeyRow.encrypted_key);
+
+  // 중복 체크: 로컬 성공 로그 + HRMS 실제 존재 여부 모두 확인
+  if (hasLogicraftSuccessLog(db, mappingId, date)) {
+    try {
+      const tasks = await listTasks(hrmsApiKey, {
+        projectId: mapping.hrms_project_id,
+        dueFrom: date,
+        dueTo: date,
+      });
+      if (tasks.length > 0) {
+        console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: already registered for ${date}, skipping`);
+        return;
+      }
+      console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: local log exists for ${date} but not in HRMS, re-registering`);
+    } catch {
+      console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: already registered for ${date}, skipping (HRMS check failed)`);
+      return;
+    }
+  }
 
   // LogiCraft 활동 수집
   const modifiedItems: LogicraftItemSummary[] = [];
