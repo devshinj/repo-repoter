@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/data-display/empty-state";
 import { toast } from "sonner";
-import { FileText, FolderGit2, CalendarDays, Trash2, ChevronRight } from "lucide-react";
+import { FileText, FolderGit2, CalendarDays, Trash2, ChevronRight, Loader2, AlertCircle } from "lucide-react";
 import { projectColor, oklch } from "@/lib/color-hash";
 import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
 import { api } from "@/lib/api-url";
@@ -20,6 +20,7 @@ interface Report {
   date_start: string | null;
   date_end: string | null;
   title: string;
+  status: string;
   owner: string;
   repo: string;
   created_at: string;
@@ -47,6 +48,14 @@ export default function ReportsPage() {
   };
 
   useEffect(() => { fetchReports(); }, []);
+
+  // pending 보고서가 있으면 3초마다 자동 폴링
+  const hasPending = reports.some((r) => r.status === "pending");
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = setInterval(fetchReports, 3000);
+    return () => clearInterval(timer);
+  }, [hasPending]);
 
   const handleDeleteClick = (e: React.MouseEvent, id: number) => {
     e.preventDefault();
@@ -129,9 +138,27 @@ export default function ReportsPage() {
                     <Link key={report.id} href={`/reports/${report.id}`}>
                       <Card className="transition-colors hover:bg-muted/40 cursor-pointer">
                         <CardContent className="flex items-center gap-3 py-3">
-                          <FileText className="h-4 w-4 flex-shrink-0" style={{ color: oklch(projColor.solid) }} />
+                          {report.status === "pending" ? (
+                            <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-500" />
+                          ) : report.status === "error" ? (
+                            <AlertCircle className="h-4 w-4 flex-shrink-0 text-destructive" />
+                          ) : (
+                            <FileText className="h-4 w-4 flex-shrink-0" style={{ color: oklch(projColor.solid) }} />
+                          )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{report.title}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium truncate">{report.title}</p>
+                              {report.status === "pending" && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                                  생성 중...
+                                </Badge>
+                              )}
+                              {report.status === "error" && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                  오류
+                                </Badge>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <CalendarDays className="h-3 w-3" />

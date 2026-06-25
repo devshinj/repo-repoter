@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarDays, ClipboardCopy, FolderGit2, Pencil, Save, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ClipboardCopy, FolderGit2, Loader2, Pencil, Save, X, AlertCircle } from "lucide-react";
 import { projectColor, oklch } from "@/lib/color-hash";
 import { ConfirmDialog } from "@/components/data-display/confirm-dialog";
 import { api } from "@/lib/api-url";
@@ -22,6 +22,7 @@ interface Report {
   date_end: string | null;
   title: string;
   content: string;
+  status: string;
   owner: string;
   repo: string;
   created_at: string;
@@ -41,13 +42,21 @@ export default function ReportDetailPage() {
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  useEffect(() => {
+  const fetchReport = () =>
     fetch(api(`/reports/${reportId}`))
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setReport)
       .catch(() => toast.error("보고서를 찾을 수 없습니다"))
       .finally(() => setLoading(false));
-  }, [reportId]);
+
+  useEffect(() => { fetchReport(); }, [reportId]);
+
+  // pending 상태면 3초마다 폴링
+  useEffect(() => {
+    if (report?.status !== "pending") return;
+    const timer = setInterval(fetchReport, 3000);
+    return () => clearInterval(timer);
+  }, [report?.status, reportId]);
 
   function startEdit() {
     if (!report) return;
@@ -118,7 +127,9 @@ export default function ReportDetailPage() {
             ) : (
               <>
                 <Button variant="outline" size="sm" onClick={() => router.push("/reports")}><ArrowLeft className="h-4 w-4 mr-1" />목록</Button>
-                <Button variant="outline" size="sm" onClick={startEdit}><Pencil className="h-4 w-4 mr-1" />수정</Button>
+                {report?.status === "completed" && (
+                  <Button variant="outline" size="sm" onClick={startEdit}><Pencil className="h-4 w-4 mr-1" />수정</Button>
+                )}
                 <Button variant="destructive" size="sm" onClick={() => setShowDeleteConfirm(true)}>삭제</Button>
               </>
             )}
@@ -167,7 +178,25 @@ export default function ReportDetailPage() {
         );
       })()}
 
-      {editing ? (
+      {report.status === "pending" ? (
+        <Card className="max-w-3xl">
+          <CardContent className="py-12 flex flex-col items-center gap-3 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            <p className="text-sm font-medium">보고서를 생성하고 있습니다...</p>
+            <p className="text-xs text-muted-foreground">AI가 커밋을 분석 중입니다. 완료되면 자동으로 표시됩니다.</p>
+          </CardContent>
+        </Card>
+      ) : report.status === "error" ? (
+        <Card className="max-w-3xl border-destructive/50">
+          <CardContent className="py-6">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <h2 className="text-lg font-semibold text-destructive">생성 실패</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">{report.content || "보고서 생성 중 오류가 발생했습니다."}</p>
+          </CardContent>
+        </Card>
+      ) : editing ? (
         <div className="space-y-4 max-w-3xl">
           <div>
             <label className="text-sm font-medium">제목</label>
