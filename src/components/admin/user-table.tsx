@@ -130,7 +130,13 @@ export function UserTable() {
                   </TableCell>
                   <TableCell className="text-right">{user.repo_count}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {user.created_at ? user.created_at.slice(0, 10) : "—"}
+                    {user.created_at
+                      ? new Date(
+                          user.created_at.includes("T") || user.created_at.endsWith("Z")
+                            ? user.created_at
+                            : user.created_at.replace(" ", "T") + "Z"
+                        ).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     {user.is_active === 1 ? (

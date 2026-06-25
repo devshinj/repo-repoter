@@ -52,12 +52,20 @@ interface SyncLogsResponse {
 
 function formatTime(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr);
-  const MM = String(d.getMonth() + 1).padStart(2, "0");
-  const DD = String(d.getDate()).padStart(2, "0");
-  const HH = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${MM}-${DD} ${HH}:${mm}`;
+  // SQLite UTC datetime → KST 변환
+  const normalized = dateStr.includes("T") || dateStr.endsWith("Z")
+    ? dateStr : dateStr.replace(" ", "T") + "Z";
+  const d = new Date(normalized);
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const p = Object.fromEntries(f.formatToParts(d).map(({ type, value }) => [type, value]));
+  return `${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
 export function SyncLogTable() {

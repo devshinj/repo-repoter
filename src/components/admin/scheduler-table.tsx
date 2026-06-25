@@ -66,7 +66,10 @@ interface SchedulerResponse {
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const diff = Date.now() - new Date(dateStr).getTime();
+  // SQLite UTC datetime → 올바른 UTC Date 파싱
+  const normalized = dateStr.includes("T") || dateStr.endsWith("Z")
+    ? dateStr : dateStr.replace(" ", "T") + "Z";
+  const diff = Date.now() - new Date(normalized).getTime();
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "방금 전";
   if (minutes < 60) return `${minutes}분 전`;
