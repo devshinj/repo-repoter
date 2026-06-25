@@ -14,12 +14,7 @@ import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { listItems, listProposals, activityItemTypes } from "@/infra/logicraft/logicraft-client";
 import { generateLogicraftTaskContent } from "@/infra/llm/llm-client";
 import type { LogicraftItemSummary, LogicraftProposal } from "@/core/types";
-
-function getYesterdayDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
+import { getKstYesterday } from "@/core/date-utils";
 
 function isOnDate(isoTimestamp: string, targetDate: string): boolean {
   return isoTimestamp.startsWith(targetDate);
@@ -52,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "LogiCraft API key not registered" }, { status: 400 });
   }
 
-  const date = targetDate ?? getYesterdayDate();
+  const date = targetDate ?? getKstYesterday();
   const hrmsApiKey = decrypt(hrmsKeyRow.encrypted_key);
   const logicraftApiKey = decrypt(logicraftKeyRow.encrypted_key);
 

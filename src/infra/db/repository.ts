@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import type { DashboardStats } from "@/core/types";
+import { getKstToday, getKstDaysAgo } from "@/core/date-utils";
 
 interface InsertUserInput {
   name: string;
@@ -494,10 +495,8 @@ export function getDashboardStats(db: Database.Database, userId: string): Dashbo
   const repos = getRepositoriesByUser(db, userId);
   const repoIds = repos.map((r: any) => r.id);
 
-  const today = new Date().toISOString().split("T")[0];
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 6);
-  const weekStart = weekAgo.toISOString().split("T")[0];
+  const today = getKstToday();
+  const weekStart = getKstDaysAgo(6);
 
   const allAuthors: string[] = [];
   for (const repo of repos) {

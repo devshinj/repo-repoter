@@ -1,4 +1,5 @@
 import cron, { type ScheduledTask } from "node-cron";
+import { getKstYesterday, kstCronOptions } from "@/core/date-utils";
 import { getDb } from "@/infra/db/connection";
 import {
   getAutoRegisterMappings,
@@ -27,9 +28,7 @@ const jobs = new Map<number, ScheduledTask>();
 const logicraftJobs = new Map<number, ScheduledTask>();
 
 function getYesterdayDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return getKstYesterday();
 }
 
 async function executeRegistration(mappingId: number): Promise<void> {
@@ -205,7 +204,7 @@ export function refreshJob(mappingId: number): void {
   const cronExpr = mapping.cron_time || "0 9 * * 1-5";
   const task = cron.schedule(cronExpr, () => {
     executeRegistration(mappingId).catch(console.error);
-  });
+  }, kstCronOptions);
   jobs.set(mappingId, task);
   console.log(`[HrmsScheduler] Job registered for mapping=${mappingId} (${cronExpr})`);
 }
@@ -218,7 +217,7 @@ export function startHrmsScheduler(): void {
     const cronExpr = m.cron_time || "0 9 * * 1-5";
     const task = cron.schedule(cronExpr, () => {
       executeRegistration(m.id).catch(console.error);
-    });
+    }, kstCronOptions);
     jobs.set(m.id, task);
   }
 
@@ -228,7 +227,7 @@ export function startHrmsScheduler(): void {
     const cronExpr = m.cron_time || "0 9 * * 1-5";
     const task = cron.schedule(cronExpr, () => {
       executeLogicraftRegistration(m.id).catch(console.error);
-    });
+    }, kstCronOptions);
     logicraftJobs.set(m.id, task);
   }
 
@@ -357,7 +356,7 @@ export function refreshLogicraftJob(mappingId: number): void {
   const cronExpr = mapping.cron_time || "0 9 * * 1-5";
   const task = cron.schedule(cronExpr, () => {
     executeLogicraftRegistration(mappingId).catch(console.error);
-  });
+  }, kstCronOptions);
   logicraftJobs.set(mappingId, task);
   console.log(`[HrmsScheduler] LogiCraft job registered for mapping=${mappingId} (${cronExpr})`);
 }

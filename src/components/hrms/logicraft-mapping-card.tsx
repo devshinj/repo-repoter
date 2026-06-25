@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api-url";
+import { getKstDateString } from "@/core/date-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,15 +38,13 @@ interface LogicraftMappingCardProps {
 }
 
 function getDateString(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return getKstDateString(offset);
 }
 
 function getDateLabel(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const dateStr = getKstDateString(offset);
+  const [, m, d] = dateStr.split("-");
+  return `${Number(m)}/${Number(d)}`;
 }
 
 function getStatusTheme(status: string) {

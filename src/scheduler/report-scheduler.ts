@@ -1,5 +1,6 @@
 // src/scheduler/report-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
+import { getKstYesterday, kstCronOptions } from "@/core/date-utils";
 import { getDb } from "@/infra/db/connection";
 import { getAutoReportEnabledRepos } from "@/infra/db/repository";
 import { insertReport } from "@/infra/db/report";
@@ -10,9 +11,7 @@ let isRunning = false;
 let lastRunAt: string | null = null;
 
 function getYesterdayDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return getKstYesterday();
 }
 
 function formatAutoReportTitle(baseTitle: string): string {
@@ -82,7 +81,7 @@ export function startReportScheduler(): void {
 
   cronTask = cron.schedule("0 9 * * *", () => {
     runDailyReportCycle().catch(console.error);
-  });
+  }, kstCronOptions);
 
   console.log("[ReportScheduler] Started — runs daily at 09:00");
 }

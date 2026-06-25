@@ -1,5 +1,6 @@
 // src/scheduler/feed-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
+import { kstCronOptions } from "@/core/date-utils";
 import { getDb } from "@/infra/db/connection";
 import { getActiveUsersWithRepos, getRepositoriesByUser } from "@/infra/db/repository";
 import { getCredentialById } from "@/infra/db/credential";
@@ -24,7 +25,7 @@ export function startFeedScheduler(): void {
   console.log("[FeedScheduler] 3시간 주기 RSS 수집 시작");
   cronTask = cron.schedule("0 */3 * * *", () => {
     runFeedCycle().catch((err) => console.error("[FeedScheduler] cycle error:", err));
-  });
+  }, kstCronOptions);
 }
 
 export async function runFeedCycle(): Promise<void> {

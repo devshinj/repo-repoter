@@ -1,5 +1,6 @@
 // src/scheduler/polling-manager.ts
 import cron, { type ScheduledTask } from "node-cron";
+import { kstCronOptions } from "@/core/date-utils";
 import {
   getActiveUsersWithRepos, getRepositoriesByUser,
   updateLastSyncedSha, insertSyncLogForUser,
@@ -235,7 +236,7 @@ export async function runSyncCycle(): Promise<void> {
 export function startScheduler(intervalMin: number = 15): void {
   if (cronTask) { console.log("[Scheduler] Already running"); return; }
   runSyncCycle().catch(console.error);
-  cronTask = cron.schedule(`*/${intervalMin} * * * *`, () => { runSyncCycle().catch(console.error); });
+  cronTask = cron.schedule(`*/${intervalMin} * * * *`, () => { runSyncCycle().catch(console.error); }, kstCronOptions);
   console.log(`[Scheduler] Started with ${intervalMin}min interval`);
 }
 

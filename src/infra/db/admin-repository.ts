@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { getKstToday } from "@/core/date-utils";
 
 // ── 사용자 관리 ──
 
@@ -271,7 +272,7 @@ export function getHrmsLogs(
 }
 
 export function getHrmsLogStats(db: Database.Database, date?: string): HrmsLogStats {
-  const targetDate = date || new Date().toISOString().split("T")[0];
+  const targetDate = date || getKstToday();
   const row = db.prepare(`
     SELECT
       COUNT(*) AS total,

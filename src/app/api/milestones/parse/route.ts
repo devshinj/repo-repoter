@@ -5,6 +5,7 @@ import { getProjectsByUser } from "@/infra/db/project-repository";
 import { getRepositoriesByUser } from "@/infra/db/repository";
 import { buildMilestoneParsePrompt, parseMilestoneParseResponse } from "@/core/feed/briefing-prompt";
 import { generateText } from "@/infra/llm/llm-client";
+import { getKstToday } from "@/core/date-utils";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   const projects = getProjectsByUser(db, userId).map((p: any) => ({ id: p.id, name: p.name }));
   const repos = getRepositoriesByUser(db, userId).map((r: any) => ({ id: r.id, name: `${r.owner}/${r.repo}` }));
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getKstToday();
   const prompt = buildMilestoneParsePrompt(body.rawInput, today, projects, repos);
 
   try {

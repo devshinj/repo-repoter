@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHeatmapCounts } from "@/infra/db/repository";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/infra/db/connection";
+import { getKstToday, toKstDateString } from "@/core/date-utils";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -11,10 +12,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const months = Math.min(Number(searchParams.get("months") || 6), 12);
 
-  const until = new Date().toISOString().split("T")[0];
+  const until = getKstToday();
   const sinceDate = new Date();
   sinceDate.setMonth(sinceDate.getMonth() - months);
-  const since = sinceDate.toISOString().split("T")[0];
+  const since = toKstDateString(sinceDate);
 
   const db = getDb();
   const data = getHeatmapCounts(db, session.user.id, since, until);

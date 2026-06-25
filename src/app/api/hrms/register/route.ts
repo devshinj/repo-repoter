@@ -18,12 +18,7 @@ import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
 import { syncOneRepo } from "@/scheduler/polling-manager";
 import { createJob, emitJobEvent } from "@/infra/hrms/registration-jobs";
-
-function getYesterdayDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
+import { getKstYesterday } from "@/core/date-utils";
 
 /** 백그라운드에서 실행되는 등록 파이프라인 */
 async function executeRegistration(
@@ -228,7 +223,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "HRMS API key not registered" }, { status: 400 });
   }
 
-  const date = targetDate ?? getYesterdayDate();
+  const date = targetDate ?? getKstYesterday();
   const apiKey = decrypt(keyRow.encrypted_key);
 
   // 중복 체크 (동기, 빠르게 완료됨)
