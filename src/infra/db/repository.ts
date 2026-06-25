@@ -138,6 +138,7 @@ interface InsertRepoForUserInput {
   repo: string;
   branch: string;
   cloneUrl: string;
+  credentialId?: number;
 }
 
 interface InsertSyncLogForUserInput {
@@ -151,8 +152,8 @@ interface InsertSyncLogForUserInput {
 
 export function insertRepositoryForUser(db: Database.Database, input: InsertRepoForUserInput): void {
   db.prepare(
-    "INSERT INTO repositories (owner, repo, branch, user_id, clone_url) VALUES (?, ?, ?, ?, ?)"
-  ).run(input.owner, input.repo, input.branch, input.userId, input.cloneUrl);
+    "INSERT INTO repositories (owner, repo, branch, user_id, clone_url, credential_id) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(input.owner, input.repo, input.branch, input.userId, input.cloneUrl, input.credentialId ?? null);
 }
 
 export function getRepositoriesByUser(db: Database.Database, userId: string) {
