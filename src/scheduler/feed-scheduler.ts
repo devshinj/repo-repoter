@@ -1,7 +1,7 @@
 // src/scheduler/feed-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
 import Database from "better-sqlite3";
-import { kstCronOptions } from "@/core/date-utils";
+import { kstCronOptions, getKstToday } from "@/core/date-utils";
 import { getDb } from "@/infra/db/connection";
 import { getActiveUsersWithRepos, getRepositoriesByUser } from "@/infra/db/repository";
 import { getCredentialById } from "@/infra/db/credential";
@@ -138,6 +138,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       const summaryPrompt = buildMilestoneSummaryPrompt({
         milestones,
         commits: allCommits,
+        currentDate: getKstToday(),
         previousSummary,
       });
       milestoneSummary = await generateText(summaryPrompt);
@@ -185,6 +186,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       const summaryPrompt = buildMilestoneSummaryPrompt({
         milestones,
         commits,
+        currentDate: getKstToday(),
         previousSummary,
       });
       milestoneSummary = await generateText(summaryPrompt);

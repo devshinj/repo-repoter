@@ -135,10 +135,10 @@ export function FeedCard({ entry, scopeName, milestones = [], onAddMilestone, on
             )}
           </div>
         )}
-        <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5">
+        <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-headings:mt-3 prose-headings:mb-1.5">
           <ReactMarkdown>{entry.briefing ?? ""}</ReactMarkdown>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground/60">
+        <p className="mt-3 text-xs text-muted-foreground/60">
           {formatPeriod(entry.periodStart, entry.periodEnd)}
         </p>
       </CardContent>

@@ -102,7 +102,7 @@ describe("buildBriefingPrompt", () => {
 });
 
 describe("buildMilestoneSummaryPrompt", () => {
-  it("should include milestone titles and deadlines", () => {
+  it("should include milestone titles, deadlines, and current date", () => {
     const prompt = buildMilestoneSummaryPrompt({
       milestones: [
         {
@@ -125,10 +125,13 @@ describe("buildMilestoneSummaryPrompt", () => {
           committedAt: "2026-06-23T10:00:00Z",
         },
       ],
+      currentDate: "2026-06-25",
     });
     expect(prompt).toContain("MVP 출시");
     expect(prompt).toContain("2026-07-05");
     expect(prompt).toContain("feat: 로그인 구현");
+    expect(prompt).toContain("2026-06-25");
+    expect(prompt).toContain("[현재 날짜]");
   });
 
   it("should include previous summary when provided", () => {
@@ -144,6 +147,7 @@ describe("buildMilestoneSummaryPrompt", () => {
         },
       ],
       commits: [],
+      currentDate: "2026-06-25",
       previousSummary: "MVP 출시: 개발 중",
     });
     expect(prompt).toContain("[이전 현황]");
@@ -163,6 +167,7 @@ describe("buildMilestoneSummaryPrompt", () => {
         },
       ],
       commits: [],
+      currentDate: "2026-06-25",
     });
     expect(prompt).not.toContain("[이전 현황]");
   });
