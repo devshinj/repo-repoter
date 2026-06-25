@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { createTables } from "@/infra/db/schema";
+import { createTables, migrateSchema } from "@/infra/db/schema";
 import {
   insertRepositoryForUser,
   getRepositoriesByUser,
@@ -16,6 +16,7 @@ describe("user-scoped repository functions", () => {
   beforeEach(() => {
     db = new Database(":memory:");
     createTables(db);
+    migrateSchema(db);
   });
 
   afterEach(() => {

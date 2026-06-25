@@ -120,13 +120,14 @@ interface InsertLogicraftTaskLogInput {
   description: string;
   status: "success" | "error";
   errorMessage: string | null;
+  triggerType?: "auto" | "manual";
 }
 
 export function insertLogicraftTaskLog(db: Database.Database, input: InsertLogicraftTaskLogInput): void {
   db.prepare(
-    `INSERT INTO hrms_logicraft_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage);
+    `INSERT INTO hrms_logicraft_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage, input.triggerType ?? "manual");
 }
 
 export function getLogicraftTaskLogs(db: Database.Database, userId: string, limit = 50) {

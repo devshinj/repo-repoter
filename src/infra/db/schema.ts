@@ -137,6 +137,7 @@ export function createTables(db: Database.Database): void {
       description TEXT NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('success', 'error', 'in_progress', 'skipped')),
       error_message TEXT,
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -177,6 +178,7 @@ export function createTables(db: Database.Database): void {
       description TEXT NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('success', 'error')),
       error_message TEXT,
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -530,5 +532,15 @@ export function migrateSchema(db: Database.Database): void {
   const latestUserColumnNames = latestUserColumns.map((c: any) => c.name);
   if (!latestUserColumnNames.includes("is_active")) {
     db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
+  }
+
+  // hrms_task_logs / hrms_logicraft_task_logs: trigger_type 컬럼 추가
+  const taskLogCols = db.prepare("PRAGMA table_info(hrms_task_logs)").all() as any[];
+  if (taskLogCols.length > 0 && !taskLogCols.some((c: any) => c.name === "trigger_type")) {
+    db.exec("ALTER TABLE hrms_task_logs ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'");
+  }
+  const lcTaskLogCols = db.prepare("PRAGMA table_info(hrms_logicraft_task_logs)").all() as any[];
+  if (lcTaskLogCols.length > 0 && !lcTaskLogCols.some((c: any) => c.name === "trigger_type")) {
+    db.exec("ALTER TABLE hrms_logicraft_task_logs ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'");
   }
 }

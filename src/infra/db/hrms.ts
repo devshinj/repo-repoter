@@ -193,13 +193,14 @@ interface InsertTaskLogInput {
   description: string;
   status: "success" | "error" | "in_progress" | "skipped";
   errorMessage: string | null;
+  triggerType?: "auto" | "manual";
 }
 
 export function insertTaskLog(db: Database.Database, input: InsertTaskLogInput): number {
   const result = db.prepare(
-    `INSERT INTO hrms_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage);
+    `INSERT INTO hrms_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage, input.triggerType ?? "manual");
   return result.lastInsertRowid as number;
 }
 
@@ -239,14 +240,16 @@ export function getUnifiedTaskLogs(db: Database.Database, userId: string, limit 
     `SELECT * FROM (
        SELECT 'git' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
               tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
-              pm.hrms_project_name, NULL AS logicraft_project_name
+              pm.hrms_project_name, NULL AS logicraft_project_name,
+              COALESCE(tl.trigger_type, 'manual') AS trigger_type
        FROM hrms_task_logs tl
        JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
        WHERE pm.user_id = ?
        UNION ALL
        SELECT 'logicraft' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
               tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
-              lm.hrms_project_name, lm.logicraft_project_name
+              lm.hrms_project_name, lm.logicraft_project_name,
+              COALESCE(tl.trigger_type, 'manual') AS trigger_type
        FROM hrms_logicraft_task_logs tl
        JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
        WHERE lm.user_id = ?

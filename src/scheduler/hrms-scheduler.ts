@@ -49,6 +49,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       mappingId, hrmsTaskId: null, targetDate: date,
       title: "등록 실패", description: "",
       status: "error", errorMessage: "HRMS API key not registered",
+      triggerType: "auto",
     });
     console.error(`[HrmsScheduler] mapping=${mappingId}: no API key for user`);
     return;
@@ -80,6 +81,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       mappingId, hrmsTaskId: null, targetDate: date,
       title: "등록 실패", description: "",
       status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}`,
+      triggerType: "auto",
     });
     console.error(`[HrmsScheduler] mapping=${mappingId}: all repos failed to sync, aborting`);
     return;
@@ -109,6 +111,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       status: "skipped", errorMessage: failedRepos.length > 0
         ? `No commits found (sync failed: ${failedRepos.join(", ")})`
         : null,
+      triggerType: "auto",
     });
     console.log(`[HrmsScheduler] mapping=${mappingId}: no commits on ${date}, skipping`);
     return;
@@ -173,6 +176,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       description,
       status: "success",
       errorMessage: null,
+      triggerType: "auto",
     });
 
     console.log(`[HrmsScheduler] mapping=${mappingId}: registered task #${created.id} for ${date}`);
@@ -185,6 +189,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       description: "",
       status: "error",
       errorMessage: err.message,
+      triggerType: "auto",
     });
     console.error(`[HrmsScheduler] mapping=${mappingId}: failed -`, err.message);
   }
@@ -325,6 +330,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
       description,
       status: "success",
       errorMessage: null,
+      triggerType: "auto",
     });
 
     console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: registered task #${created.id} for ${date}`);
@@ -337,6 +343,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
       description: "",
       status: "error",
       errorMessage: err.message,
+      triggerType: "auto",
     });
     console.error(`[HrmsScheduler] logicraft mapping=${mappingId}: failed -`, err.message);
   }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ExternalLink, ChevronDown, ChevronUp, GitBranch, Blocks } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronUp, GitBranch, Blocks, Zap, Hand } from "lucide-react";
 
 interface RegisterHistoryProps {
   logs: any[];
@@ -27,6 +27,7 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
         const isSuccess = log.status === "success";
         const isSkipped = log.status === "skipped";
         const isLogicraft = log.source === "logicraft";
+        const isAuto = log.trigger_type === "auto";
 
         return (
           <Card key={logKey} className="overflow-hidden">
@@ -46,6 +47,15 @@ export function RegisterHistory({ logs }: RegisterHistoryProps) {
                   ? <Blocks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   : <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 }
+                {isAuto ? (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                    <Zap className="h-2.5 w-2.5" />자동
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-500/10 text-muted-foreground shrink-0">
+                    <Hand className="h-2.5 w-2.5" />수동
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground shrink-0">{log.target_date}</span>
                 <span className="text-sm font-medium truncate flex-1">
                   {log.hrms_project_name} - {isSuccess ? log.title : isSkipped ? "커밋 없음" : log.error_message}
