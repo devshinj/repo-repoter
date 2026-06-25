@@ -15,11 +15,8 @@ import {
 } from "@/infra/db/feed-repository";
 import { getRepositoryProjectId } from "@/infra/db/project-repository";
 import { getActiveMilestonesByScope } from "@/infra/db/milestone-repository";
-import { buildBriefingPrompt, buildMilestoneSummaryPrompt, type LogicraftActivity } from "@/core/feed/briefing-prompt";
+import { buildBriefingPrompt, buildMilestoneSummaryPrompt } from "@/core/feed/briefing-prompt";
 import { generateText } from "@/infra/llm/llm-client";
-import { listItems, activityItemTypes } from "@/infra/logicraft/logicraft-client";
-import { getLogicraftApiKey } from "@/infra/db/logicraft";
-import { decrypt } from "@/infra/crypto/token-encryption";
 import type { GitProviderMeta } from "@/core/types";
 import type { RssCommit } from "@/core/feed/feed-types";
 
@@ -52,9 +49,6 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
   // getRepositoriesByUser already filters is_active = 1
   const repos = getRepositoriesByUser(db, userId);
   let newEntries = 0;
-
-  // Step 0: LogiCraft 활동 수집 (있으면)
-  const logicraftActivities = await collectLogicraftActivities(db, userId);
 
   // Step 1: RSS 수집 — 전 저장소 RSS fetch → rss_commits에 저장
   //         RSS 실패(private 저장소 등) 시 commit_cache fallback
@@ -129,7 +123,6 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       commits: allCommits,
       milestones,
       previousMilestoneSummary: previousSummary,
-      logicraftActivities,
     });
     const briefing = await generateText(prompt);
 
@@ -178,7 +171,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
     const scopeName = repo ? (repo.label || `${repo.owner}/${repo.repo}`) : "Unknown";
     const milestones = getActiveMilestonesByScope(db, "repository", repoId);
     const previousSummary = getLatestMilestoneSummary(db, userId, "repository", repoId) ?? undefined;
-    const prompt = buildBriefingPrompt({ scopeName, commits, milestones, previousMilestoneSummary: previousSummary, logicraftActivities });
+    const prompt = buildBriefingPrompt({ scopeName, commits, milestones, previousMilestoneSummary: previousSummary });
     const briefing = await generateText(prompt);
 
     let milestoneSummary: string | null = null;
@@ -228,50 +221,6 @@ function resolveProviderMeta(repo: {
   } catch {
     return null;
   }
-}
-
-/**
- * 사용자의 LogiCraft 매핑에서 최근 활동을 수집.
- * API 키가 없거나 매핑이 없으면 빈 배열 반환.
- */
-async function collectLogicraftActivities(
-  db: Database.Database,
-  userId: string,
-): Promise<LogicraftActivity[]> {
-  const keyRow = getLogicraftApiKey(db, userId);
-  if (!keyRow) return [];
-
-  const mappings = db.prepare(
-    "SELECT logicraft_project_id, logicraft_project_name FROM hrms_logicraft_mappings WHERE user_id = ?",
-  ).all(userId) as { logicraft_project_id: string; logicraft_project_name: string }[];
-  if (mappings.length === 0) return [];
-
-  const apiKey = decrypt(keyRow.encrypted_key);
-  const activities: LogicraftActivity[] = [];
-
-  for (const mapping of mappings) {
-    for (const type of activityItemTypes) {
-      try {
-        const items = await listItems(apiKey, mapping.logicraft_project_id, type, { limit: 50 });
-        // 최근 3일 이내 수정된 항목만
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 3);
-        const cutoffStr = cutoff.toISOString();
-
-        for (const item of items) {
-          if (item.last_updated_at >= cutoffStr) {
-            activities.push({
-              type,
-              title: item.title,
-              updatedAt: item.last_updated_at,
-            });
-          }
-        }
-      } catch { /* 타입별 조회 실패 무시 */ }
-    }
-  }
-
-  return activities;
 }
 
 /**
