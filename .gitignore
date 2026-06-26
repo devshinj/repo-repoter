@@ -35,12 +35,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# SQLite
-data/*.db
-data/*.db-journal
-data/*.db-shm
-data/*.db-wal
-
 # Git bare clones (사용자별 저장소)
 data/repos/
 
