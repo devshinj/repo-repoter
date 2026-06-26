@@ -1,32 +1,28 @@
-import Database from "better-sqlite3";
+import { sql } from "@/infra/db/connection";
 
 // ── logicraft_api_keys ──
 
-export function upsertLogicraftApiKey(
-  db: Database.Database,
+export async function upsertLogicraftApiKey(
   input: { userId: string; encryptedKey: string },
-): void {
-  db.prepare(
-    `INSERT INTO logicraft_api_keys (user_id, encrypted_key)
-     VALUES (?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       encrypted_key = excluded.encrypted_key,
-       updated_at = datetime('now')`,
-  ).run(input.userId, input.encryptedKey);
+): Promise<void> {
+  await sql`
+    INSERT INTO logicraft_api_keys (user_id, encrypted_key)
+    VALUES (${input.userId}, ${input.encryptedKey})
+    ON CONFLICT(user_id) DO UPDATE SET
+      encrypted_key = EXCLUDED.encrypted_key,
+      updated_at = NOW()
+  `;
 }
 
-export function getLogicraftApiKey(db: Database.Database, userId: string) {
-  return (
-    (db
-      .prepare(
-        "SELECT id, user_id, encrypted_key, created_at, updated_at FROM logicraft_api_keys WHERE user_id = ?",
-      )
-      .get(userId) as any) ?? null
-  );
+export async function getLogicraftApiKey(userId: string): Promise<any | null> {
+  const [row] = await sql`
+    SELECT id, user_id, encrypted_key, created_at, updated_at FROM logicraft_api_keys WHERE user_id = ${userId}
+  `;
+  return row ?? null;
 }
 
-export function deleteLogicraftApiKey(db: Database.Database, userId: string): void {
-  db.prepare("DELETE FROM logicraft_api_keys WHERE user_id = ?").run(userId);
+export async function deleteLogicraftApiKey(userId: string): Promise<void> {
+  await sql`DELETE FROM logicraft_api_keys WHERE user_id = ${userId}`;
 }
 
 // ── hrms_logicraft_mappings ──
@@ -41,45 +37,35 @@ interface InsertLogicraftMappingInput {
   cronTime: string;
 }
 
-export function insertLogicraftMapping(db: Database.Database, input: InsertLogicraftMappingInput): number {
-  const result = db.prepare(
-    `INSERT INTO hrms_logicraft_mappings
-       (user_id, hrms_project_id, hrms_project_name, logicraft_project_id, logicraft_project_name, auto_register, cron_time)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    input.userId,
-    input.hrmsProjectId,
-    input.hrmsProjectName,
-    input.logicraftProjectId,
-    input.logicraftProjectName,
-    input.autoRegister ? 1 : 0,
-    input.cronTime,
-  );
-  return result.lastInsertRowid as number;
+export async function insertLogicraftMapping(input: InsertLogicraftMappingInput): Promise<number> {
+  const [result] = await sql`
+    INSERT INTO hrms_logicraft_mappings
+      (user_id, hrms_project_id, hrms_project_name, logicraft_project_id, logicraft_project_name, auto_register, cron_time)
+    VALUES (${input.userId}, ${input.hrmsProjectId}, ${input.hrmsProjectName}, ${input.logicraftProjectId}, ${input.logicraftProjectName}, ${input.autoRegister}, ${input.cronTime})
+    RETURNING id
+  `;
+  return result.id as number;
 }
 
-export function getLogicraftMappingsByUser(db: Database.Database, userId: string) {
-  return db.prepare(
-    `SELECT id, user_id, hrms_project_id, hrms_project_name,
-            logicraft_project_id, logicraft_project_name,
-            auto_register, cron_time, created_at, updated_at
-     FROM hrms_logicraft_mappings
-     WHERE user_id = ?
-     ORDER BY created_at DESC`,
-  ).all(userId) as any[];
+export async function getLogicraftMappingsByUser(userId: string): Promise<any[]> {
+  return await sql`
+    SELECT id, user_id, hrms_project_id, hrms_project_name,
+           logicraft_project_id, logicraft_project_name,
+           auto_register, cron_time, created_at, updated_at
+    FROM hrms_logicraft_mappings
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `;
 }
 
-export function getLogicraftMappingById(db: Database.Database, id: number) {
-  return (
-    (db
-      .prepare(
-        `SELECT id, user_id, hrms_project_id, hrms_project_name,
-                logicraft_project_id, logicraft_project_name,
-                auto_register, cron_time, created_at, updated_at
-         FROM hrms_logicraft_mappings WHERE id = ?`,
-      )
-      .get(id) as any) ?? null
-  );
+export async function getLogicraftMappingById(id: number): Promise<any | null> {
+  const [row] = await sql`
+    SELECT id, user_id, hrms_project_id, hrms_project_name,
+           logicraft_project_id, logicraft_project_name,
+           auto_register, cron_time, created_at, updated_at
+    FROM hrms_logicraft_mappings WHERE id = ${id}
+  `;
+  return row ?? null;
 }
 
 interface UpdateLogicraftMappingInput {
@@ -88,26 +74,26 @@ interface UpdateLogicraftMappingInput {
   cronTime?: string;
 }
 
-export function updateLogicraftMapping(db: Database.Database, id: number, input: UpdateLogicraftMappingInput): void {
+export async function updateLogicraftMapping(id: number, input: UpdateLogicraftMappingInput): Promise<void> {
   if (input.hrmsProjectName !== undefined) {
-    db.prepare(
-      "UPDATE hrms_logicraft_mappings SET hrms_project_name = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(input.hrmsProjectName, id);
+    await sql`
+      UPDATE hrms_logicraft_mappings SET hrms_project_name = ${input.hrmsProjectName}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
   if (input.autoRegister !== undefined) {
-    db.prepare(
-      "UPDATE hrms_logicraft_mappings SET auto_register = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(input.autoRegister ? 1 : 0, id);
+    await sql`
+      UPDATE hrms_logicraft_mappings SET auto_register = ${input.autoRegister}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
   if (input.cronTime !== undefined) {
-    db.prepare(
-      "UPDATE hrms_logicraft_mappings SET cron_time = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(input.cronTime, id);
+    await sql`
+      UPDATE hrms_logicraft_mappings SET cron_time = ${input.cronTime}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
 }
 
-export function deleteLogicraftMapping(db: Database.Database, id: number): void {
-  db.prepare("DELETE FROM hrms_logicraft_mappings WHERE id = ?").run(id);
+export async function deleteLogicraftMapping(id: number): Promise<void> {
+  await sql`DELETE FROM hrms_logicraft_mappings WHERE id = ${id}`;
 }
 
 // ── hrms_logicraft_task_logs ──
@@ -123,47 +109,44 @@ interface InsertLogicraftTaskLogInput {
   triggerType?: "auto" | "manual";
 }
 
-export function insertLogicraftTaskLog(db: Database.Database, input: InsertLogicraftTaskLogInput): void {
-  db.prepare(
-    `INSERT INTO hrms_logicraft_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage, input.triggerType ?? "manual");
+export async function insertLogicraftTaskLog(input: InsertLogicraftTaskLogInput): Promise<void> {
+  await sql`
+    INSERT INTO hrms_logicraft_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
+    VALUES (${input.mappingId}, ${input.hrmsTaskId}, ${input.targetDate}, ${input.title}, ${input.description}, ${input.status}, ${input.errorMessage}, ${input.triggerType ?? "manual"})
+  `;
 }
 
-export function getLogicraftTaskLogs(db: Database.Database, userId: string, limit = 50) {
-  return db.prepare(
-    `SELECT tl.*, lm.hrms_project_name, lm.logicraft_project_name
-     FROM hrms_logicraft_task_logs tl
-     JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
-     WHERE lm.user_id = ?
-     ORDER BY tl.created_at DESC
-     LIMIT ?`,
-  ).all(userId, limit) as any[];
+export async function getLogicraftTaskLogs(userId: string, limit = 50): Promise<any[]> {
+  return await sql`
+    SELECT tl.*, lm.hrms_project_name, lm.logicraft_project_name
+    FROM hrms_logicraft_task_logs tl
+    JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
+    WHERE lm.user_id = ${userId}
+    ORDER BY tl.created_at DESC
+    LIMIT ${limit}
+  `;
 }
 
-export function hasLogicraftSuccessLog(db: Database.Database, mappingId: number, targetDate: string): boolean {
-  const row = db.prepare(
-    "SELECT 1 FROM hrms_logicraft_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' LIMIT 1",
-  ).get(mappingId, targetDate);
+export async function hasLogicraftSuccessLog(mappingId: number, targetDate: string): Promise<boolean> {
+  const [row] = await sql`
+    SELECT 1 FROM hrms_logicraft_task_logs WHERE mapping_id = ${mappingId} AND target_date = ${targetDate} AND status = 'success' LIMIT 1
+  `;
   return !!row;
 }
 
-export function getLastLogicraftSuccessLog(db: Database.Database, mappingId: number, targetDate: string) {
-  return (
-    (db
-      .prepare(
-        "SELECT hrms_task_id FROM hrms_logicraft_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' ORDER BY created_at DESC LIMIT 1",
-      )
-      .get(mappingId, targetDate) as { hrms_task_id: number | null } | undefined) ?? null
-  );
+export async function getLastLogicraftSuccessLog(mappingId: number, targetDate: string): Promise<{ hrms_task_id: number | null } | null> {
+  const [row] = await sql`
+    SELECT hrms_task_id FROM hrms_logicraft_task_logs WHERE mapping_id = ${mappingId} AND target_date = ${targetDate} AND status = 'success' ORDER BY created_at DESC LIMIT 1
+  `;
+  return (row as { hrms_task_id: number | null } | undefined) ?? null;
 }
 
-export function getAutoRegisterLogicraftMappings(db: Database.Database) {
-  return db.prepare(
-    `SELECT lm.*, lak.encrypted_key AS logicraft_encrypted_key, hak.encrypted_key AS hrms_encrypted_key
-     FROM hrms_logicraft_mappings lm
-     JOIN logicraft_api_keys lak ON lak.user_id = lm.user_id
-     JOIN hrms_api_keys hak ON hak.user_id = lm.user_id
-     WHERE lm.auto_register = 1`,
-  ).all() as any[];
+export async function getAutoRegisterLogicraftMappings(): Promise<any[]> {
+  return await sql`
+    SELECT lm.*, lak.encrypted_key AS logicraft_encrypted_key, hak.encrypted_key AS hrms_encrypted_key
+    FROM hrms_logicraft_mappings lm
+    JOIN logicraft_api_keys lak ON lak.user_id = lm.user_id
+    JOIN hrms_api_keys hak ON hak.user_id = lm.user_id
+    WHERE lm.auto_register = true
+  `;
 }

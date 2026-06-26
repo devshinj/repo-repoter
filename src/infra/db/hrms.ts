@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { sql } from "@/infra/db/connection";
 
 // ── hrms_api_keys ──
 
@@ -10,67 +10,71 @@ interface UpsertHrmsApiKeyInput {
   scopes: string | null;
 }
 
-export function upsertHrmsApiKey(db: Database.Database, input: UpsertHrmsApiKeyInput): void {
-  db.prepare(
-    `INSERT INTO hrms_api_keys (user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       encrypted_key = excluded.encrypted_key,
-       hrms_user_id = excluded.hrms_user_id,
-       hrms_user_name = excluded.hrms_user_name,
-       scopes = excluded.scopes,
-       updated_at = datetime('now')`
-  ).run(input.userId, input.encryptedKey, input.hrmsUserId, input.hrmsUserName, input.scopes);
+export async function upsertHrmsApiKey(input: UpsertHrmsApiKeyInput): Promise<void> {
+  await sql`
+    INSERT INTO hrms_api_keys (user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes)
+    VALUES (${input.userId}, ${input.encryptedKey}, ${input.hrmsUserId}, ${input.hrmsUserName}, ${input.scopes})
+    ON CONFLICT(user_id) DO UPDATE SET
+      encrypted_key = EXCLUDED.encrypted_key,
+      hrms_user_id = EXCLUDED.hrms_user_id,
+      hrms_user_name = EXCLUDED.hrms_user_name,
+      scopes = EXCLUDED.scopes,
+      updated_at = NOW()
+  `;
 }
 
-export function getHrmsApiKey(db: Database.Database, userId: string) {
-  return (db.prepare(
-    "SELECT id, user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes, created_at, updated_at FROM hrms_api_keys WHERE user_id = ?"
-  ).get(userId) ?? null) as any | null;
+export async function getHrmsApiKey(userId: string): Promise<any | null> {
+  const [row] = await sql`
+    SELECT id, user_id, encrypted_key, hrms_user_id, hrms_user_name, scopes, created_at, updated_at
+    FROM hrms_api_keys WHERE user_id = ${userId}
+  `;
+  return row ?? null;
 }
 
-export function deleteHrmsApiKey(db: Database.Database, userId: string): void {
-  db.prepare("DELETE FROM hrms_api_keys WHERE user_id = ?").run(userId);
+export async function deleteHrmsApiKey(userId: string): Promise<void> {
+  await sql`DELETE FROM hrms_api_keys WHERE user_id = ${userId}`;
 }
 
-export function getHrmsStats(db: Database.Database, userId: string) {
-  const mappingCount = (db.prepare(
-    "SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ?"
-  ).get(userId) as any)?.cnt ?? 0;
+export async function getHrmsStats(userId: string): Promise<{ mappingCount: number; logCount: number; autoCount: number }> {
+  const [mappingRow] = await sql`
+    SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ${userId}
+  `;
+  const mappingCount = Number(mappingRow?.cnt ?? 0);
 
-  const logCount = (db.prepare(
-    `SELECT COUNT(*) as cnt FROM hrms_task_logs tl
-     JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
-     WHERE pm.user_id = ?`
-  ).get(userId) as any)?.cnt ?? 0;
+  const [logRow] = await sql`
+    SELECT COUNT(*) as cnt FROM hrms_task_logs tl
+    JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
+    WHERE pm.user_id = ${userId}
+  `;
+  const logCount = Number(logRow?.cnt ?? 0);
 
-  const autoCount = (db.prepare(
-    "SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ? AND auto_register = 1"
-  ).get(userId) as any)?.cnt ?? 0;
+  const [autoRow] = await sql`
+    SELECT COUNT(*) as cnt FROM hrms_project_mappings WHERE user_id = ${userId} AND auto_register = true
+  `;
+  const autoCount = Number(autoRow?.cnt ?? 0);
 
   return { mappingCount, logCount, autoCount };
 }
 
-export function deleteAllHrmsDataByUser(db: Database.Database, userId: string): void {
-  const deleteTx = db.transaction(() => {
+export async function deleteAllHrmsDataByUser(userId: string): Promise<void> {
+  await sql.begin(async (tx) => {
     // 매핑 ID 목록 조회
-    const mappingIds = db.prepare(
-      "SELECT id FROM hrms_project_mappings WHERE user_id = ?"
-    ).all(userId).map((r: any) => r.id);
+    const mappingRows = await tx`
+      SELECT id FROM hrms_project_mappings WHERE user_id = ${userId}
+    `;
+    const mappingIds = mappingRows.map((r: any) => r.id);
 
     if (mappingIds.length > 0) {
-      const placeholders = mappingIds.map(() => "?").join(",");
       // 등록 이력 삭제
-      db.prepare(`DELETE FROM hrms_task_logs WHERE mapping_id IN (${placeholders})`).run(...mappingIds);
+      await tx`DELETE FROM hrms_task_logs WHERE mapping_id = ANY(${mappingIds}::int[])`;
       // 매핑-저장소 관계 삭제
-      db.prepare(`DELETE FROM hrms_mapping_repos WHERE mapping_id IN (${placeholders})`).run(...mappingIds);
+      await tx`DELETE FROM hrms_mapping_repos WHERE mapping_id = ANY(${mappingIds}::int[])`;
     }
     // 매핑 삭제
-    db.prepare("DELETE FROM hrms_project_mappings WHERE user_id = ?").run(userId);
+    await tx`DELETE FROM hrms_project_mappings WHERE user_id = ${userId}`;
     // API Key 삭제
-    db.prepare("DELETE FROM hrms_api_keys WHERE user_id = ?").run(userId);
+    await tx`DELETE FROM hrms_api_keys WHERE user_id = ${userId}`;
   });
-  deleteTx();
 }
 
 // ── hrms_project_mappings + hrms_mapping_repos ──
@@ -84,40 +88,39 @@ interface InsertMappingInput {
   repositoryIds: number[];
 }
 
-export function insertMapping(db: Database.Database, input: InsertMappingInput): number {
-  const result = db.prepare(
-    `INSERT INTO hrms_project_mappings (user_id, hrms_project_id, hrms_project_name, auto_register, cron_time)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(input.userId, input.hrmsProjectId, input.hrmsProjectName, input.autoRegister ? 1 : 0, input.cronTime);
+export async function insertMapping(input: InsertMappingInput): Promise<number> {
+  const [result] = await sql`
+    INSERT INTO hrms_project_mappings (user_id, hrms_project_id, hrms_project_name, auto_register, cron_time)
+    VALUES (${input.userId}, ${input.hrmsProjectId}, ${input.hrmsProjectName}, ${input.autoRegister}, ${input.cronTime})
+    RETURNING id
+  `;
+  const mappingId = result.id as number;
 
-  const mappingId = result.lastInsertRowid as number;
-
-  const repoStmt = db.prepare(
-    "INSERT INTO hrms_mapping_repos (mapping_id, repository_id) VALUES (?, ?)"
-  );
   for (const repoId of input.repositoryIds) {
-    repoStmt.run(mappingId, repoId);
+    await sql`
+      INSERT INTO hrms_mapping_repos (mapping_id, repository_id) VALUES (${mappingId}, ${repoId})
+    `;
   }
 
   return mappingId;
 }
 
-export function getMappingsByUser(db: Database.Database, userId: string) {
-  const mappings = db.prepare(
-    "SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at FROM hrms_project_mappings WHERE user_id = ? ORDER BY created_at DESC"
-  ).all(userId) as any[];
+export async function getMappingsByUser(userId: string): Promise<any[]> {
+  const mappings = await sql`
+    SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at
+    FROM hrms_project_mappings WHERE user_id = ${userId} ORDER BY created_at DESC
+  `;
 
   if (mappings.length === 0) return [];
 
   // 1회 쿼리로 모든 매핑의 repos를 한번에 조회
   const mappingIds = mappings.map((m: any) => m.id);
-  const placeholders = mappingIds.map(() => "?").join(",");
-  const allRepos = db.prepare(
-    `SELECT mr.mapping_id, r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
-     FROM hrms_mapping_repos mr
-     JOIN repositories r ON r.id = mr.repository_id
-     WHERE mr.mapping_id IN (${placeholders})`
-  ).all(...mappingIds) as any[];
+  const allRepos = await sql`
+    SELECT mr.mapping_id, r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
+    FROM hrms_mapping_repos mr
+    JOIN repositories r ON r.id = mr.repository_id
+    WHERE mr.mapping_id = ANY(${mappingIds}::int[])
+  `;
 
   // mapping_id별로 그룹핑
   const reposByMapping = new Map<number, any[]>();
@@ -133,19 +136,20 @@ export function getMappingsByUser(db: Database.Database, userId: string) {
   }));
 }
 
-export function getMappingById(db: Database.Database, id: number) {
-  const mapping = db.prepare(
-    "SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at FROM hrms_project_mappings WHERE id = ?"
-  ).get(id) as any | null;
+export async function getMappingById(id: number): Promise<any | null> {
+  const [mapping] = await sql`
+    SELECT id, user_id, hrms_project_id, hrms_project_name, auto_register, cron_time, created_at, updated_at
+    FROM hrms_project_mappings WHERE id = ${id}
+  `;
 
   if (!mapping) return null;
 
-  const repos = db.prepare(
-    `SELECT r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
-     FROM hrms_mapping_repos mr
-     JOIN repositories r ON r.id = mr.repository_id
-     WHERE mr.mapping_id = ?`
-  ).all(id) as any[];
+  const repos = await sql`
+    SELECT r.id, r.owner, r.repo, r.branch, r.label, r.git_author, r.clone_url, r.credential_id
+    FROM hrms_mapping_repos mr
+    JOIN repositories r ON r.id = mr.repository_id
+    WHERE mr.mapping_id = ${id}
+  `;
 
   return { ...mapping, repos };
 }
@@ -157,30 +161,32 @@ interface UpdateMappingInput {
   repositoryIds?: number[];
 }
 
-export function updateMapping(db: Database.Database, id: number, input: UpdateMappingInput): void {
+export async function updateMapping(id: number, input: UpdateMappingInput): Promise<void> {
   if (input.hrmsProjectName !== undefined) {
-    db.prepare("UPDATE hrms_project_mappings SET hrms_project_name = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(input.hrmsProjectName, id);
+    await sql`
+      UPDATE hrms_project_mappings SET hrms_project_name = ${input.hrmsProjectName}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
   if (input.autoRegister !== undefined) {
-    db.prepare("UPDATE hrms_project_mappings SET auto_register = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(input.autoRegister ? 1 : 0, id);
+    await sql`
+      UPDATE hrms_project_mappings SET auto_register = ${input.autoRegister}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
   if (input.cronTime !== undefined) {
-    db.prepare("UPDATE hrms_project_mappings SET cron_time = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(input.cronTime, id);
+    await sql`
+      UPDATE hrms_project_mappings SET cron_time = ${input.cronTime}, updated_at = NOW() WHERE id = ${id}
+    `;
   }
   if (input.repositoryIds !== undefined) {
-    db.prepare("DELETE FROM hrms_mapping_repos WHERE mapping_id = ?").run(id);
-    const stmt = db.prepare("INSERT INTO hrms_mapping_repos (mapping_id, repository_id) VALUES (?, ?)");
+    await sql`DELETE FROM hrms_mapping_repos WHERE mapping_id = ${id}`;
     for (const repoId of input.repositoryIds) {
-      stmt.run(id, repoId);
+      await sql`INSERT INTO hrms_mapping_repos (mapping_id, repository_id) VALUES (${id}, ${repoId})`;
     }
   }
 }
 
-export function deleteMapping(db: Database.Database, id: number): void {
-  db.prepare("DELETE FROM hrms_project_mappings WHERE id = ?").run(id);
+export async function deleteMapping(id: number): Promise<void> {
+  await sql`DELETE FROM hrms_project_mappings WHERE id = ${id}`;
 }
 
 // ── hrms_task_logs ──
@@ -196,86 +202,88 @@ interface InsertTaskLogInput {
   triggerType?: "auto" | "manual";
 }
 
-export function insertTaskLog(db: Database.Database, input: InsertTaskLogInput): number {
-  const result = db.prepare(
-    `INSERT INTO hrms_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(input.mappingId, input.hrmsTaskId, input.targetDate, input.title, input.description, input.status, input.errorMessage, input.triggerType ?? "manual");
-  return result.lastInsertRowid as number;
+export async function insertTaskLog(input: InsertTaskLogInput): Promise<number> {
+  const [result] = await sql`
+    INSERT INTO hrms_task_logs (mapping_id, hrms_task_id, target_date, title, description, status, error_message, trigger_type)
+    VALUES (${input.mappingId}, ${input.hrmsTaskId}, ${input.targetDate}, ${input.title}, ${input.description}, ${input.status}, ${input.errorMessage}, ${input.triggerType ?? "manual"})
+    RETURNING id
+  `;
+  return result.id as number;
 }
 
 /** in_progress → success/error 업데이트 */
-export function updateTaskLog(
-  db: Database.Database,
+export async function updateTaskLog(
   logId: number,
   update: { status: "success" | "error" | "skipped"; hrmsTaskId?: number; title?: string; description?: string; errorMessage?: string | null },
-): void {
-  db.prepare(
-    `UPDATE hrms_task_logs SET status = ?, hrms_task_id = COALESCE(?, hrms_task_id),
-     title = COALESCE(?, title), description = COALESCE(?, description),
-     error_message = ? WHERE id = ?`
-  ).run(update.status, update.hrmsTaskId ?? null, update.title ?? null, update.description ?? null, update.errorMessage ?? null, logId);
+): Promise<void> {
+  await sql`
+    UPDATE hrms_task_logs SET status = ${update.status}, hrms_task_id = COALESCE(${update.hrmsTaskId ?? null}, hrms_task_id),
+    title = COALESCE(${update.title ?? null}, title), description = COALESCE(${update.description ?? null}, description),
+    error_message = ${update.errorMessage ?? null} WHERE id = ${logId}
+  `;
 }
 
 /** 특정 매핑의 in_progress 로그 조회 */
-export function getInProgressLog(db: Database.Database, mappingId: number) {
-  return db.prepare(
-    "SELECT id, target_date FROM hrms_task_logs WHERE mapping_id = ? AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1"
-  ).get(mappingId) as { id: number; target_date: string } | undefined ?? null;
+export async function getInProgressLog(mappingId: number): Promise<{ id: number; target_date: string } | null> {
+  const [row] = await sql`
+    SELECT id, target_date FROM hrms_task_logs WHERE mapping_id = ${mappingId} AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1
+  `;
+  return (row as { id: number; target_date: string } | undefined) ?? null;
 }
 
-export function getTaskLogs(db: Database.Database, userId: string, limit = 50) {
-  return db.prepare(
-    `SELECT tl.*, pm.hrms_project_name
-     FROM hrms_task_logs tl
-     JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
-     WHERE pm.user_id = ?
-     ORDER BY tl.created_at DESC
-     LIMIT ?`
-  ).all(userId, limit) as any[];
+export async function getTaskLogs(userId: string, limit = 50): Promise<any[]> {
+  return await sql`
+    SELECT tl.*, pm.hrms_project_name
+    FROM hrms_task_logs tl
+    JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
+    WHERE pm.user_id = ${userId}
+    ORDER BY tl.created_at DESC
+    LIMIT ${limit}
+  `;
 }
 
-export function getUnifiedTaskLogs(db: Database.Database, userId: string, limit = 50) {
-  return db.prepare(
-    `SELECT * FROM (
-       SELECT 'git' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
-              tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
-              pm.hrms_project_name, NULL AS logicraft_project_name,
-              COALESCE(tl.trigger_type, 'manual') AS trigger_type
-       FROM hrms_task_logs tl
-       JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
-       WHERE pm.user_id = ?
-       UNION ALL
-       SELECT 'logicraft' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
-              tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
-              lm.hrms_project_name, lm.logicraft_project_name,
-              COALESCE(tl.trigger_type, 'manual') AS trigger_type
-       FROM hrms_logicraft_task_logs tl
-       JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
-       WHERE lm.user_id = ?
-     ) ORDER BY created_at DESC
-     LIMIT ?`
-  ).all(userId, userId, limit) as any[];
+export async function getUnifiedTaskLogs(userId: string, limit = 50): Promise<any[]> {
+  return await sql`
+    SELECT * FROM (
+      SELECT 'git' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
+             tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
+             pm.hrms_project_name, NULL AS logicraft_project_name,
+             COALESCE(tl.trigger_type, 'manual') AS trigger_type
+      FROM hrms_task_logs tl
+      JOIN hrms_project_mappings pm ON pm.id = tl.mapping_id
+      WHERE pm.user_id = ${userId}
+      UNION ALL
+      SELECT 'logicraft' AS source, tl.id, tl.mapping_id, tl.hrms_task_id, tl.target_date,
+             tl.title, tl.description, tl.status, tl.error_message, tl.created_at,
+             lm.hrms_project_name, lm.logicraft_project_name,
+             COALESCE(tl.trigger_type, 'manual') AS trigger_type
+      FROM hrms_logicraft_task_logs tl
+      JOIN hrms_logicraft_mappings lm ON lm.id = tl.mapping_id
+      WHERE lm.user_id = ${userId}
+    ) unified ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
 }
 
-export function hasSuccessLog(db: Database.Database, mappingId: number, targetDate: string): boolean {
-  const row = db.prepare(
-    "SELECT 1 FROM hrms_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' LIMIT 1"
-  ).get(mappingId, targetDate);
+export async function hasSuccessLog(mappingId: number, targetDate: string): Promise<boolean> {
+  const [row] = await sql`
+    SELECT 1 FROM hrms_task_logs WHERE mapping_id = ${mappingId} AND target_date = ${targetDate} AND status = 'success' LIMIT 1
+  `;
   return !!row;
 }
 
-export function getLastSuccessLog(db: Database.Database, mappingId: number, targetDate: string) {
-  return db.prepare(
-    "SELECT hrms_task_id FROM hrms_task_logs WHERE mapping_id = ? AND target_date = ? AND status = 'success' ORDER BY created_at DESC LIMIT 1"
-  ).get(mappingId, targetDate) as { hrms_task_id: number | null } | undefined ?? null;
+export async function getLastSuccessLog(mappingId: number, targetDate: string): Promise<{ hrms_task_id: number | null } | null> {
+  const [row] = await sql`
+    SELECT hrms_task_id FROM hrms_task_logs WHERE mapping_id = ${mappingId} AND target_date = ${targetDate} AND status = 'success' ORDER BY created_at DESC LIMIT 1
+  `;
+  return (row as { hrms_task_id: number | null } | undefined) ?? null;
 }
 
-export function getAutoRegisterMappings(db: Database.Database) {
-  return db.prepare(
-    `SELECT pm.*, hak.encrypted_key
-     FROM hrms_project_mappings pm
-     JOIN hrms_api_keys hak ON hak.user_id = pm.user_id
-     WHERE pm.auto_register = 1`
-  ).all() as any[];
+export async function getAutoRegisterMappings(): Promise<any[]> {
+  return await sql`
+    SELECT pm.*, hak.encrypted_key
+    FROM hrms_project_mappings pm
+    JOIN hrms_api_keys hak ON hak.user_id = pm.user_id
+    WHERE pm.auto_register = true
+  `;
 }
