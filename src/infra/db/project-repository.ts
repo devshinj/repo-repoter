@@ -1,184 +1,148 @@
-import Database from "better-sqlite3";
-import type { Project, ProjectWithRepos, Milestone } from "@/core/project/project-types";
+import { sql } from "@/infra/db/connection";
+import type { Project, ProjectWithRepos } from "@/core/project/project-types";
 
-export function insertProject(
-  db: Database.Database,
-  input: {
-    userId: string;
-    name: string;
-    description?: string;
-    repositoryIds: number[];
-  }
-): number {
-  const transaction = db.transaction(() => {
-    const result = db
-      .prepare(
-        `
+export async function insertProject(input: {
+  userId: string;
+  name: string;
+  description?: string;
+  repositoryIds: number[];
+}): Promise<number> {
+  return await sql.begin(async (tx) => {
+    const [row] = await tx`
       INSERT INTO projects (user_id, name, description)
-      VALUES (?, ?, ?)
-    `
-      )
-      .run(input.userId, input.name, input.description || null);
+      VALUES (${input.userId}, ${input.name}, ${input.description ?? null})
+      RETURNING id
+    `;
 
-    const projectId = result.lastInsertRowid as number;
+    const projectId = row.id as number;
 
     if (input.repositoryIds.length > 0) {
-      const linkStmt = db.prepare(
-        "INSERT INTO project_repositories (project_id, repository_id) VALUES (?, ?)"
-      );
       for (const repoId of input.repositoryIds) {
-        linkStmt.run(projectId, repoId);
+        await tx`
+          INSERT INTO project_repositories (project_id, repository_id)
+          VALUES (${projectId}, ${repoId})
+        `;
       }
     }
 
     return projectId;
   });
-
-  return transaction();
 }
 
-export function getProjectsByUser(db: Database.Database, userId: string): Project[] {
-  const rows = db
-    .prepare(
-      `
-    SELECT id, user_id as userId, name, description, created_at as createdAt, updated_at as updatedAt
+export async function getProjectsByUser(userId: string): Promise<Project[]> {
+  const rows = await sql`
+    SELECT id, user_id AS "userId", name, description,
+           created_at AS "createdAt", updated_at AS "updatedAt"
     FROM projects
-    WHERE user_id = ?
+    WHERE user_id = ${userId}
     ORDER BY created_at DESC
-  `
-    )
-    .all(userId) as Array<{
-    id: number;
-    userId: string;
-    name: string;
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+  `;
 
   return rows.map((row) => ({
-    id: row.id,
-    userId: row.userId,
-    name: row.name,
-    description: row.description,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    id: row.id as number,
+    userId: row.userId as string,
+    name: row.name as string,
+    description: row.description as string | undefined,
+    createdAt: row.createdAt as string,
+    updatedAt: row.updatedAt as string,
   }));
 }
 
-export function getProjectWithRepos(
-  db: Database.Database,
+export async function getProjectWithRepos(
   projectId: number
-): ProjectWithRepos | null {
-  const project = db
-    .prepare(
-      `
-    SELECT id, user_id as userId, name, description, created_at as createdAt, updated_at as updatedAt
+): Promise<ProjectWithRepos | null> {
+  const [project] = await sql`
+    SELECT id, user_id AS "userId", name, description,
+           created_at AS "createdAt", updated_at AS "updatedAt"
     FROM projects
-    WHERE id = ?
-  `
-    )
-    .get(projectId) as {
-    id: number;
-    userId: string;
-    name: string;
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-  } | undefined;
+    WHERE id = ${projectId}
+  `;
 
   if (!project) {
     return null;
   }
 
-  const repos = db
-    .prepare(
-      `
-    SELECT repository_id as repositoryId
+  const repoRows = await sql`
+    SELECT repository_id AS "repositoryId"
     FROM project_repositories
-    WHERE project_id = ?
-  `
-    )
-    .all(projectId) as { repositoryId: number }[];
+    WHERE project_id = ${projectId}
+  `;
 
   return {
-    id: project.id,
-    userId: project.userId,
-    name: project.name,
-    description: project.description,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    repositoryIds: repos.map((r) => r.repositoryId),
+    id: project.id as number,
+    userId: project.userId as string,
+    name: project.name as string,
+    description: project.description as string | undefined,
+    createdAt: project.createdAt as string,
+    updatedAt: project.updatedAt as string,
+    repositoryIds: repoRows.map((r) => r.repositoryId as number),
   };
 }
 
-export function updateProject(
-  db: Database.Database,
+export async function updateProject(
   id: number,
   input: {
     name?: string;
     description?: string;
     repositoryIds?: number[];
   }
-): void {
-  const transaction = db.transaction(() => {
+): Promise<void> {
+  await sql.begin(async (tx) => {
     if (input.name !== undefined || input.description !== undefined) {
       const updates: string[] = [];
-      const values: any[] = [];
 
-      if (input.name !== undefined) {
-        updates.push("name = ?");
-        values.push(input.name);
+      if (input.name !== undefined && input.description !== undefined) {
+        await tx`
+          UPDATE projects
+          SET name = ${input.name}, description = ${input.description}, updated_at = NOW()
+          WHERE id = ${id}
+        `;
+      } else if (input.name !== undefined) {
+        await tx`
+          UPDATE projects
+          SET name = ${input.name}, updated_at = NOW()
+          WHERE id = ${id}
+        `;
+      } else if (input.description !== undefined) {
+        await tx`
+          UPDATE projects
+          SET description = ${input.description}, updated_at = NOW()
+          WHERE id = ${id}
+        `;
       }
-      if (input.description !== undefined) {
-        updates.push("description = ?");
-        values.push(input.description);
-      }
-
-      updates.push("updated_at = datetime('now')");
-      values.push(id);
-
-      db.prepare(`UPDATE projects SET ${updates.join(", ")} WHERE id = ?`).run(...values);
     }
 
     if (input.repositoryIds !== undefined) {
       // Clear existing links
-      db.prepare("DELETE FROM project_repositories WHERE project_id = ?").run(id);
+      await tx`DELETE FROM project_repositories WHERE project_id = ${id}`;
 
       // Insert new links
-      const linkStmt = db.prepare(
-        "INSERT INTO project_repositories (project_id, repository_id) VALUES (?, ?)"
-      );
       for (const repoId of input.repositoryIds) {
-        linkStmt.run(id, repoId);
+        await tx`
+          INSERT INTO project_repositories (project_id, repository_id)
+          VALUES (${id}, ${repoId})
+        `;
       }
     }
   });
-
-  transaction();
 }
 
-export function deleteProject(db: Database.Database, id: number): void {
-  db.prepare("DELETE FROM feed_entries WHERE scope_type = 'project' AND scope_id = ?").run(id);
-  db.prepare("DELETE FROM milestones WHERE project_id = ?").run(id);
-  db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+export async function deleteProject(id: number): Promise<void> {
+  await sql`DELETE FROM feed_entries WHERE scope_type = 'project' AND scope_id = ${id}`;
+  await sql`DELETE FROM milestones WHERE project_id = ${id}`;
+  await sql`DELETE FROM projects WHERE id = ${id}`;
   // project_repositories cascade deletes via FK
 }
 
-export function getRepositoryProjectId(
-  db: Database.Database,
+export async function getRepositoryProjectId(
   repositoryId: number
-): number | null {
-  const row = db
-    .prepare(
-      `
-    SELECT project_id as projectId
+): Promise<number | null> {
+  const [row] = await sql`
+    SELECT project_id AS "projectId"
     FROM project_repositories
-    WHERE repository_id = ?
+    WHERE repository_id = ${repositoryId}
     LIMIT 1
-  `
-    )
-    .get(repositoryId) as { projectId: number } | undefined;
+  `;
 
   return row?.projectId ?? null;
 }
