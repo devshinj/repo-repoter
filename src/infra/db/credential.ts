@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { sql } from "@/infra/db/connection";
 
 interface InsertCredentialInput {
   userId: string;
@@ -14,40 +14,60 @@ interface UpdateCredentialInput {
   metadata: string | null;
 }
 
-export function insertCredential(db: Database.Database, input: InsertCredentialInput): void {
-  db.prepare(
-    "INSERT INTO user_credentials (user_id, provider, credential, label, metadata) VALUES (?, ?, ?, ?, ?)"
-  ).run(input.userId, input.provider, input.credential, input.label, input.metadata);
+export async function insertCredential(input: InsertCredentialInput): Promise<void> {
+  const metadataValue = input.metadata ? sql.json(JSON.parse(input.metadata)) : null;
+  await sql`
+    INSERT INTO user_credentials (user_id, provider, credential, label, metadata)
+    VALUES (${input.userId}, ${input.provider}, ${input.credential}, ${input.label}, ${metadataValue})
+  `;
 }
 
-export function getCredentialsByUser(db: Database.Database, userId: string) {
-  return db.prepare("SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ?").all(userId) as any[];
+export async function getCredentialsByUser(userId: string): Promise<any[]> {
+  return await sql`
+    SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at
+    FROM user_credentials
+    WHERE user_id = ${userId}
+  `;
 }
 
-export function getCredentialByUserAndProvider(db: Database.Database, userId: string, provider: string) {
-  return db.prepare(
-    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ? AND provider = ?"
-  ).get(userId, provider) as any | undefined;
+export async function getCredentialByUserAndProvider(userId: string, provider: string): Promise<any | undefined> {
+  const [row] = await sql`
+    SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at
+    FROM user_credentials
+    WHERE user_id = ${userId} AND provider = ${provider}
+  `;
+  return row;
 }
 
-export function getCredentialsByUserAndProvider(db: Database.Database, userId: string, provider: string) {
-  return db.prepare(
-    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE user_id = ? AND provider = ?"
-  ).all(userId, provider) as any[];
+export async function getCredentialsByUserAndProvider(userId: string, provider: string): Promise<any[]> {
+  return await sql`
+    SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at
+    FROM user_credentials
+    WHERE user_id = ${userId} AND provider = ${provider}
+  `;
 }
 
-export function getCredentialById(db: Database.Database, id: number) {
-  return db.prepare(
-    "SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at FROM user_credentials WHERE id = ?"
-  ).get(id) as any | undefined;
+export async function getCredentialById(id: number): Promise<any | undefined> {
+  const [row] = await sql`
+    SELECT id, user_id, provider, credential, label, metadata, created_at, updated_at
+    FROM user_credentials
+    WHERE id = ${id}
+  `;
+  return row;
 }
 
-export function updateCredential(db: Database.Database, id: number, input: UpdateCredentialInput): void {
-  db.prepare(
-    "UPDATE user_credentials SET credential = ?, label = ?, metadata = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(input.credential, input.label, input.metadata, id);
+export async function updateCredential(id: number, input: UpdateCredentialInput): Promise<void> {
+  const metadataValue = input.metadata ? sql.json(JSON.parse(input.metadata)) : null;
+  await sql`
+    UPDATE user_credentials
+    SET credential = ${input.credential},
+        label = ${input.label},
+        metadata = ${metadataValue},
+        updated_at = NOW()
+    WHERE id = ${id}
+  `;
 }
 
-export function deleteCredential(db: Database.Database, id: number): void {
-  db.prepare("DELETE FROM user_credentials WHERE id = ?").run(id);
+export async function deleteCredential(id: number): Promise<void> {
+  await sql`DELETE FROM user_credentials WHERE id = ${id}`;
 }

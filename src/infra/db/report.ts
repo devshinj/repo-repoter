@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { sql } from "@/infra/db/connection";
 
 interface InsertReportInput {
   userId: string;
@@ -12,57 +12,89 @@ interface InsertReportInput {
   status?: string;
 }
 
-export function insertReport(db: Database.Database, input: InsertReportInput): number {
-  const result = db.prepare(
-    "INSERT INTO reports (user_id, repository_id, project, date, title, content, date_start, date_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    input.userId, input.repositoryId, input.project, input.date,
-    input.title, input.content,
-    input.dateStart ?? null, input.dateEnd ?? null, input.status ?? "completed"
-  );
-  return result.lastInsertRowid as number;
+export async function insertReport(input: InsertReportInput): Promise<number> {
+  const [row] = await sql`
+    INSERT INTO reports (user_id, repository_id, project, date, title, content, date_start, date_end, status)
+    VALUES (
+      ${input.userId},
+      ${input.repositoryId},
+      ${input.project},
+      ${input.date},
+      ${input.title},
+      ${input.content},
+      ${input.dateStart ?? null},
+      ${input.dateEnd ?? null},
+      ${input.status ?? "completed"}
+    )
+    RETURNING id
+  `;
+  return row.id as number;
 }
 
-export function getReportsByUser(db: Database.Database, userId: string) {
-  return db.prepare(
-    "SELECT r.*, repo.owner, repo.repo FROM reports r LEFT JOIN repositories repo ON r.repository_id = repo.id WHERE r.user_id = ? ORDER BY r.date DESC, r.created_at DESC"
-  ).all(userId) as any[];
+export async function getReportsByUser(userId: string): Promise<any[]> {
+  return await sql`
+    SELECT r.*, repo.owner, repo.repo
+    FROM reports r
+    LEFT JOIN repositories repo ON r.repository_id = repo.id
+    WHERE r.user_id = ${userId}
+    ORDER BY r.date DESC, r.created_at DESC
+  `;
 }
 
-export function getReportById(db: Database.Database, id: number, userId: string) {
-  return db.prepare(
-    "SELECT r.*, repo.owner, repo.repo FROM reports r LEFT JOIN repositories repo ON r.repository_id = repo.id WHERE r.id = ? AND r.user_id = ?"
-  ).get(id, userId) as any | undefined;
+export async function getReportById(id: number, userId: string): Promise<any | undefined> {
+  const [row] = await sql`
+    SELECT r.*, repo.owner, repo.repo
+    FROM reports r
+    LEFT JOIN repositories repo ON r.repository_id = repo.id
+    WHERE r.id = ${id} AND r.user_id = ${userId}
+  `;
+  return row;
 }
 
-export function updateReport(db: Database.Database, id: number, userId: string, input: { title: string; content: string }): boolean {
-  const result = db.prepare(
-    "UPDATE reports SET title = ?, content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
-  ).run(input.title, input.content, id, userId);
-  return result.changes > 0;
+export async function updateReport(
+  id: number,
+  userId: string,
+  input: { title: string; content: string }
+): Promise<boolean> {
+  const result = await sql`
+    UPDATE reports
+    SET title = ${input.title},
+        content = ${input.content},
+        updated_at = NOW()
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  return result.count > 0;
 }
 
-export function deleteReport(db: Database.Database, id: number, userId: string): boolean {
-  const result = db.prepare(
-    "DELETE FROM reports WHERE id = ? AND user_id = ?"
-  ).run(id, userId);
-  return result.changes > 0;
+export async function deleteReport(id: number, userId: string): Promise<boolean> {
+  const result = await sql`
+    DELETE FROM reports
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  return result.count > 0;
 }
 
-export function updateReportStatus(
-  db: Database.Database,
+export async function updateReportStatus(
   id: number,
   status: string,
   updates?: { title?: string; content?: string }
-): boolean {
+): Promise<boolean> {
   if (updates?.title && updates?.content) {
-    const result = db.prepare(
-      "UPDATE reports SET status = ?, title = ?, content = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(status, updates.title, updates.content, id);
-    return result.changes > 0;
+    const result = await sql`
+      UPDATE reports
+      SET status = ${status},
+          title = ${updates.title},
+          content = ${updates.content},
+          updated_at = NOW()
+      WHERE id = ${id}
+    `;
+    return result.count > 0;
   }
-  const result = db.prepare(
-    "UPDATE reports SET status = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(status, id);
-  return result.changes > 0;
+  const result = await sql`
+    UPDATE reports
+    SET status = ${status},
+        updated_at = NOW()
+    WHERE id = ${id}
+  `;
+  return result.count > 0;
 }
