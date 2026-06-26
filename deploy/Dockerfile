@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json package-lock.json ./
 RUN npm ci
 
+COPY src/infra/db/connection.ts ./src/infra/db/
 COPY scripts/migrate-sqlite-to-pg.ts ./scripts/
 COPY tsconfig.json ./
 

@@ -16,6 +16,7 @@ import Database from "better-sqlite3";
 import postgres from "postgres";
 import * as path from "path";
 import * as fs from "fs";
+import { initDb, closeSql } from "../src/infra/db/connection";
 
 // ─────────────────────────────────────────────
 // CLI 옵션
@@ -604,6 +605,10 @@ async function main(): Promise<void> {
     return;
   }
 
+  separator("PostgreSQL 테이블 생성");
+  await initDb();
+  console.log("  테이블 생성 완료 (CREATE TABLE IF NOT EXISTS)");
+
   separator("마이그레이션 시작");
 
   const results: MigrationResult[] = [];
@@ -637,4 +642,5 @@ main()
   .finally(async () => {
     sqlite.close();
     await pg.end();
+    await closeSql();
   });
