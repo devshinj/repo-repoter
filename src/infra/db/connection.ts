@@ -254,7 +254,7 @@ async function createTables(): Promise<void> {
     CREATE TABLE IF NOT EXISTS feed_entries (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
-      scope_type TEXT NOT NULL CHECK(scope_type IN ('project', 'repository')),
+      scope_type TEXT NOT NULL CHECK(scope_type IN ('project', 'repository', 'logicraft')),
       scope_id INTEGER NOT NULL,
       briefing TEXT,
       milestone_summary TEXT,
@@ -296,4 +296,14 @@ async function createTables(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_feed_entries_user_created ON feed_entries(user_id, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_rss_commits_repo_sha ON rss_commits(repository_id, sha)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_rss_commits_feed_entry ON rss_commits(feed_entry_id)`;
+
+  // Migration: feed_entries scope_type에 'logicraft' 추가
+  const [constraint] = await sql`
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'feed_entries'::regclass AND contype = 'c' AND conname LIKE '%scope_type%'
+  `;
+  if (constraint) {
+    await sql`ALTER TABLE feed_entries DROP CONSTRAINT ${sql(constraint.conname)}`;
+    await sql`ALTER TABLE feed_entries ADD CONSTRAINT ${sql(constraint.conname)} CHECK(scope_type IN ('project', 'repository', 'logicraft'))`;
+  }
 }

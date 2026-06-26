@@ -92,6 +92,7 @@ export default function DashboardPage() {
   const [feedEntries, setFeedEntries] = useState<FeedEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [logicraftMappings, setLogicraftMappings] = useState<Array<{ id: number; logicraft_project_name: string }>>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Milestone dialog state
@@ -165,19 +166,22 @@ export default function DashboardPage() {
     const loadFeed = async () => {
       try {
         // 1. 캐시된 데이터 즉시 표시
-        const [feedRes, projectsRes, milestonesRes] = await Promise.all([
+        const [feedRes, projectsRes, milestonesRes, lcRes] = await Promise.all([
           fetch(api("/feed")),
           fetch(api("/projects")),
           fetch(api("/milestones")),
+          fetch(api("/logicraft/mappings")),
         ]);
-        const [feedData, projectsData, milestonesData] = await Promise.all([
+        const [feedData, projectsData, milestonesData, lcData] = await Promise.all([
           feedRes.json(),
           projectsRes.json(),
           milestonesRes.json(),
+          lcRes.ok ? lcRes.json() : [],
         ]);
         setFeedEntries(Array.isArray(feedData) ? feedData : feedData.entries ?? []);
         setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
         setMilestones(Array.isArray(milestonesData) ? milestonesData : []);
+        setLogicraftMappings(Array.isArray(lcData) ? lcData : []);
       } catch {
         // Feed errors are non-critical — don't set syncError
       } finally {
@@ -211,6 +215,9 @@ export default function DashboardPage() {
   for (const repo of repos) {
     scopeNames.set(`repository:${repo.id}`, repo.label || `${repo.owner}/${repo.repo}`);
   }
+  for (const lc of logicraftMappings) {
+    scopeNames.set(`logicraft:${lc.id}`, `📐 ${lc.logicraft_project_name}`);
+  }
 
   // ---------------------------------------------------------------------------
   // Tree metrics
@@ -232,19 +239,22 @@ export default function DashboardPage() {
   // ---------------------------------------------------------------------------
   const refreshFeed = useCallback(async () => {
     try {
-      const [feedRes, projectsRes, milestonesRes] = await Promise.all([
+      const [feedRes, projectsRes, milestonesRes, lcRes] = await Promise.all([
         fetch(api("/feed")),
         fetch(api("/projects")),
         fetch(api("/milestones")),
+        fetch(api("/logicraft/mappings")),
       ]);
-      const [feedData, projectsData, milestonesData] = await Promise.all([
+      const [feedData, projectsData, milestonesData, lcData] = await Promise.all([
         feedRes.json(),
         projectsRes.json(),
         milestonesRes.json(),
+        lcRes.ok ? lcRes.json() : [],
       ]);
       setFeedEntries(Array.isArray(feedData) ? feedData : feedData.entries ?? []);
       setProjects(Array.isArray(projectsData) ? projectsData : projectsData.projects ?? []);
       setMilestones(Array.isArray(milestonesData) ? milestonesData : []);
+      setLogicraftMappings(Array.isArray(lcData) ? lcData : []);
     } catch {
       // Feed errors are non-critical
     }

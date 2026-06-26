@@ -14,8 +14,12 @@ import {
 } from "@/infra/db/feed-repository";
 import { getRepositoryProjectId } from "@/infra/db/project-repository";
 import { getActiveMilestonesByScope } from "@/infra/db/milestone-repository";
-import { buildBriefingPrompt, buildMilestoneSummaryPrompt } from "@/core/feed/briefing-prompt";
+import { buildBriefingPrompt, buildMilestoneSummaryPrompt, buildLogicraftBriefingPrompt } from "@/core/feed/briefing-prompt";
+import type { LogicraftActivity } from "@/core/feed/briefing-prompt";
 import { generateText } from "@/infra/llm/llm-client";
+import { getLogicraftMappingsWithApiKey } from "@/infra/db/logicraft";
+import { listItems, listProposals, activityItemTypes } from "@/infra/logicraft/logicraft-client";
+import { decrypt } from "@/infra/crypto/token-encryption";
 import type { GitProviderMeta } from "@/core/types";
 import type { RssCommit } from "@/core/feed/feed-types";
 
@@ -194,6 +198,75 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
 
     await markRssCommitsProcessed(shas, repoId, entryId);
     newEntries++;
+  }
+
+  // Step 3: LogiCraft 프로젝트 브리핑 — 매핑된 프로젝트의 최근 활동 수집
+  try {
+    const logicraftMappings = await getLogicraftMappingsWithApiKey(userId);
+    for (const mapping of logicraftMappings) {
+      try {
+        const apiKey = decrypt(mapping.encrypted_key);
+        const activities: LogicraftActivity[] = [];
+
+        // 최근 3일 이내 변경된 항목 수집
+        const since = new Date();
+        since.setDate(since.getDate() - 3);
+        const sinceStr = since.toISOString().slice(0, 10);
+
+        for (const type of activityItemTypes) {
+          try {
+            const items = await listItems(apiKey, mapping.logicraft_project_id, type, { limit: 100 });
+            for (const item of items) {
+              if (item.last_updated_at >= sinceStr) {
+                activities.push({
+                  type: item.type,
+                  title: item.title,
+                  updatedAt: item.last_updated_at.slice(0, 10),
+                });
+              }
+            }
+          } catch { /* 타입별 조회 실패 무시 */ }
+        }
+
+        try {
+          const proposals = await listProposals(apiKey, mapping.logicraft_project_id);
+          for (const p of proposals) {
+            const pDate = p.createdAt.slice(0, 10);
+            if (pDate >= sinceStr) {
+              activities.push({
+                type: "proposal",
+                title: p.rationale || `제안 #${p.id}`,
+                updatedAt: pDate,
+              });
+            }
+          }
+        } catch { /* 무시 */ }
+
+        if (activities.length === 0) continue;
+
+        const prompt = buildLogicraftBriefingPrompt({
+          projectName: mapping.logicraft_project_name,
+          activities,
+        });
+        const briefing = await generateText(prompt);
+        const now = new Date().toISOString();
+
+        await insertFeedEntry({
+          userId,
+          scopeType: "logicraft",
+          scopeId: mapping.id,
+          briefing,
+          commitShas: [],
+          periodStart: sinceStr,
+          periodEnd: now,
+        });
+        newEntries++;
+      } catch (err) {
+        console.warn(`[FeedScheduler] LogiCraft mapping ${mapping.id} error:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn(`[FeedScheduler] LogiCraft feed error for user ${userId}:`, err);
   }
 
   return { newEntries };

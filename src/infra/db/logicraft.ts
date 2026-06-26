@@ -141,6 +141,16 @@ export async function getLastLogicraftSuccessLog(mappingId: number, targetDate: 
   return (row as { hrms_task_id: number | null } | undefined) ?? null;
 }
 
+export async function getLogicraftMappingsWithApiKey(userId: string): Promise<any[]> {
+  return await sql`
+    SELECT lm.id, lm.logicraft_project_id, lm.logicraft_project_name,
+           lak.encrypted_key
+    FROM hrms_logicraft_mappings lm
+    JOIN logicraft_api_keys lak ON lak.user_id = lm.user_id
+    WHERE lm.user_id = ${userId}
+  `;
+}
+
 export async function getAutoRegisterLogicraftMappings(): Promise<any[]> {
   return await sql`
     SELECT lm.*, lak.encrypted_key AS logicraft_encrypted_key, hak.encrypted_key AS hrms_encrypted_key

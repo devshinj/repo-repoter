@@ -45,7 +45,7 @@ export async function markRssCommitsProcessed(
 
 export async function insertFeedEntry(input: {
   userId: string;
-  scopeType: "project" | "repository";
+  scopeType: "project" | "repository" | "logicraft";
   scopeId: number;
   briefing?: string;
   milestoneSummary?: string;
@@ -105,6 +105,8 @@ export async function deleteOrphanedFeedEntries(userId: string): Promise<void> {
         (scope_type = 'repository' AND scope_id NOT IN (SELECT id FROM repositories))
         OR
         (scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects))
+        OR
+        (scope_type = 'logicraft' AND scope_id NOT IN (SELECT id FROM hrms_logicraft_mappings))
       )
   `;
 }
@@ -114,7 +116,7 @@ export async function getFeedEntries(userId: string, limit: number = 20): Promis
     Array<{
       id: number;
       userId: string;
-      scopeType: "project" | "repository";
+      scopeType: "project" | "repository" | "logicraft";
       scopeId: number;
       briefing?: string;
       milestoneSummary?: string;

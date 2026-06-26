@@ -14,7 +14,7 @@ export interface GroupSuggestion {
 export interface FeedEntry {
   id: number;
   userId: string;
-  scopeType: "project" | "repository";
+  scopeType: "project" | "repository" | "logicraft";
   scopeId: number;
   briefing?: string;
   milestoneSummary?: string;

@@ -78,12 +78,44 @@ ${milestoneSection}${previousMilestoneSection}
 ${authorSections}
 ${logicraftSection}
 [출력 규칙]
-핵심 변경사항을 bullet으로 요약.
+핵심 변경사항을 마크다운 불릿(-)으로 요약.
 ${logicraftActivities && logicraftActivities.length > 0 ? "- 설계 산출물 변경도 함께 요약에 포함." : ""}
-- 인사말·감상·칭찬·격려 금지. 사실 위주 간결체.
-- 3~5줄 이내로 핵심만. 커밋 메시지를 그대로 나열하지 말고 의미 단위로 묶어서 요약.
-- 텍스트만 응답 (JSON/코드블록 불필요)
-- 한국어로 작성`;
+- 각 항목은 한 문장으로 완결. 두 가지 이상의 작업을 콤마(,)나 접속사(~하고)로 이어붙이지 말 것.
+- 3~5개 항목, 각 항목 1줄 이내.
+- 커밋 메시지를 그대로 나열하지 말고 의미 단위로 묶어서 요약.
+- 인사말·감상·칭찬·격려 금지. 사실 위주 간결체. 개조식 명사형 종결 (예: "API 구현", "버그 수정").
+- 하위 불릿(중첩) 금지. 최상위 불릿만 사용.
+- 한국어, 마크다운 불릿만 응답 (JSON/코드블록 불필요).`;
+}
+
+export interface LogicraftBriefingInput {
+  projectName: string;
+  activities: LogicraftActivity[];
+}
+
+export function buildLogicraftBriefingPrompt(input: LogicraftBriefingInput): string {
+  const { projectName, activities } = input;
+
+  const activityLines = activities
+    .map((a) => `- [${a.type}] ${a.title} (${a.updatedAt})`)
+    .join("\n");
+
+  return `설계 프로젝트의 업무 현황 브리핑을 작성하세요.
+
+[프로젝트]
+${projectName}
+
+[설계 산출물 변경 내역]
+${activityLines}
+
+[출력 규칙]
+- 핵심 변경사항을 마크다운 불릿(-)으로 요약.
+- 각 항목은 한 문장으로 완결. 두 가지 이상의 작업을 콤마(,)나 접속사(~하고)로 이어붙이지 말 것.
+- 3~5개 항목, 각 항목 1줄 이내.
+- 산출물 변경을 그대로 나열하지 말고 의미 단위로 묶어서 요약.
+- 인사말·감상·칭찬·격려 금지. 사실 위주 간결체. 개조식 명사형 종결 (예: "API 설계 추가", "ERD 수정").
+- 하위 불릿(중첩) 금지. 최상위 불릿만 사용.
+- 한국어, 마크다운 불릿만 응답 (JSON/코드블록 불필요).`;
 }
 
 export interface MilestoneSummaryInput {
@@ -124,13 +156,18 @@ ${previousSection}
 ${commitLines}
 
 [출력 규칙]
-- 마일스톤별로 한 줄씩 상태 정리.
-- 상태: 개발 중 / 수정·보완 / 활동 없음 / 지연 위험 / 완료 근접
-- 마감일 있으면 현재 날짜 기준으로 정확한 남은 일수를 계산하여 표기.
-- 이전 현황이 있으면 변화(진전/정체/후퇴)를 반영.
-- 인사말·감상 금지. 사실만 간결하게.
-- 텍스트만 응답 (JSON/코드블록 불필요)
-- 한국어로 작성`;
+- 마일스톤별로 정확히 한 줄씩, 아래 형식을 엄격히 따를 것:
+  마일스톤명 — 상태 · N일 남음 · 변화
+- 상태(5가지 중 택1): 개발 중 / 수정·보완 / 활동 없음 / 지연 위험 / 완료 근접
+- 남은 일수: 현재 날짜 기준 정확 계산. 0이면 "오늘 마감". 초과하면 "N일 초과".
+- 변화: 이전 현황이 있으면 "진전 있음" / "변화 없음" / "후퇴" 중 택1. 없으면 생략.
+- 구분자 "—"(em dash)와 "·"(가운뎃점)를 반드시 사용.
+- 인사말·감상 금지. 형식 외 텍스트 추가 금지.
+- 텍스트만 응답. 한국어로 작성.
+
+출력 예시:
+HRMS 연동 완료 — 수정·보완 · 3일 남음 · 진전 있음
+UI 리뉴얼 — 개발 중 · 12일 남음`;
 }
 
 export function buildMilestoneParsePrompt(
