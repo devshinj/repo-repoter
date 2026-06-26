@@ -24,9 +24,15 @@ export async function generateText(prompt: string): Promise<string> {
     openai.chat.completions.create({
       model: getModel(),
       messages: [{ role: "user", content: prompt }],
-    })
+      extra_body: { enable_thinking: false },
+    } as any)
   );
-  return result.choices[0]?.message?.content ?? "";
+  const raw = result.choices[0]?.message?.content ?? "";
+  return stripThinkingTags(raw);
+}
+
+function stripThinkingTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
 async function withRetry<T>(
@@ -282,8 +288,23 @@ export async function generateHrmsTaskContent(
   estimatedMinutes: number,
 ): Promise<{ title: string; description: string }> {
   const prompt = buildHrmsTaskPrompt(projectName, date, repoCommits, estimatedMinutes);
-  const text = await generateText(prompt);
-  return parseHrmsTaskResponse(text);
+
+  // 1차 시도
+  let text = await generateText(prompt);
+  let parsed = parseHrmsTaskResponse(text);
+
+  // 빈 응답 검증 — description이 비어있으면 1회 재시도
+  if (!parsed.description.trim()) {
+    console.warn("[LLM] HRMS task content empty, retrying...");
+    text = await generateText(prompt);
+    parsed = parseHrmsTaskResponse(text);
+  }
+
+  if (!parsed.description.trim()) {
+    throw new Error("LLM이 빈 응답을 반환했습니다 (2회 시도 실패)");
+  }
+
+  return parsed;
 }
 
 export function buildLogicraftTaskPrompt(
@@ -353,6 +374,19 @@ export async function generateLogicraftTaskContent(
   proposals: LogicraftProposal[],
 ): Promise<{ title: string; description: string }> {
   const prompt = buildLogicraftTaskPrompt(projectName, logicraftProjectName, date, items, proposals);
-  const text = await generateText(prompt);
-  return parseHrmsTaskResponse(text);
+
+  let text = await generateText(prompt);
+  let parsed = parseHrmsTaskResponse(text);
+
+  if (!parsed.description.trim()) {
+    console.warn("[LLM] LogiCraft task content empty, retrying...");
+    text = await generateText(prompt);
+    parsed = parseHrmsTaskResponse(text);
+  }
+
+  if (!parsed.description.trim()) {
+    throw new Error("LLM이 빈 응답을 반환했습니다 (2회 시도 실패)");
+  }
+
+  return parsed;
 }

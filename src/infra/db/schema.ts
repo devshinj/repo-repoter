@@ -543,4 +543,18 @@ export function migrateSchema(db: Database.Database): void {
   if (lcTaskLogCols.length > 0 && !lcTaskLogCols.some((c: any) => c.name === "trigger_type")) {
     db.exec("ALTER TABLE hrms_logicraft_task_logs ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'");
   }
+
+  // 소급 정리: 삭제된 저장소/프로젝트의 orphan feed 엔트리 + rss_commits 일괄 제거
+  db.prepare(`
+    DELETE FROM rss_commits
+    WHERE repository_id NOT IN (SELECT id FROM repositories)
+  `).run();
+  const orphanResult = db.prepare(`
+    DELETE FROM feed_entries
+    WHERE (scope_type = 'repository' AND scope_id NOT IN (SELECT id FROM repositories))
+       OR (scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects))
+  `).run();
+  if (orphanResult.changes > 0) {
+    console.log(`[Schema] Cleaned ${orphanResult.changes} orphaned feed entries`);
+  }
 }

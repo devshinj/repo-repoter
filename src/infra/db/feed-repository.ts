@@ -125,6 +125,12 @@ export function getLatestMilestoneSummary(
 }
 
 export function deleteOrphanedFeedEntries(db: Database.Database, userId: string): void {
+  // orphan rss_commits 먼저 정리 (삭제된 저장소에 속한 커밋)
+  db.prepare(`
+    DELETE FROM rss_commits
+    WHERE repository_id NOT IN (SELECT id FROM repositories)
+  `).run();
+
   db.prepare(`
     DELETE FROM feed_entries
     WHERE user_id = ?
@@ -134,6 +140,23 @@ export function deleteOrphanedFeedEntries(db: Database.Database, userId: string)
         (scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects))
       )
   `).run(userId);
+}
+
+/** 모든 유저의 orphan feed 엔트리 일괄 정리 (소급 적용용) */
+export function deleteAllOrphanedFeedEntries(db: Database.Database): number {
+  // orphan rss_commits 정리
+  db.prepare(`
+    DELETE FROM rss_commits
+    WHERE repository_id NOT IN (SELECT id FROM repositories)
+  `).run();
+
+  const result = db.prepare(`
+    DELETE FROM feed_entries
+    WHERE (scope_type = 'repository' AND scope_id NOT IN (SELECT id FROM repositories))
+       OR (scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects))
+  `).run();
+
+  return result.changes;
 }
 
 export function getFeedEntries(
@@ -151,6 +174,11 @@ export function getFeedEntries(
       period_start as periodStart, period_end as periodEnd, created_at as createdAt
     FROM feed_entries
     WHERE user_id = ?
+      AND (
+        (scope_type = 'repository' AND EXISTS (SELECT 1 FROM repositories WHERE id = scope_id))
+        OR
+        (scope_type = 'project' AND EXISTS (SELECT 1 FROM projects WHERE id = scope_id))
+      )
     ORDER BY created_at DESC
     LIMIT ?
   `
