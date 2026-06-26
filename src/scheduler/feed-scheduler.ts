@@ -1,8 +1,7 @@
 // src/scheduler/feed-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
-import Database from "better-sqlite3";
 import { kstCronOptions, getKstToday } from "@/core/date-utils";
-import { getDb } from "@/infra/db/connection";
+import { sql } from "@/infra/db/connection";
 import { getActiveUsersWithRepos, getRepositoriesByUser } from "@/infra/db/repository";
 import { getCredentialById } from "@/infra/db/credential";
 import { fetchRssCommits } from "@/infra/rss/rss-client";
@@ -31,9 +30,7 @@ export function startFeedScheduler(): void {
 }
 
 export async function runFeedCycle(): Promise<void> {
-  const db = getDb();
-  // getActiveUsersWithRepos returns string[] (user IDs)
-  const userIds = getActiveUsersWithRepos(db);
+  const userIds = await getActiveUsersWithRepos();
 
   for (const userId of userIds) {
     try {
@@ -45,16 +42,14 @@ export async function runFeedCycle(): Promise<void> {
 }
 
 export async function refreshFeedForUser(userId: string): Promise<{ newEntries: number }> {
-  const db = getDb();
-  // getRepositoriesByUser already filters is_active = 1
-  const repos = getRepositoriesByUser(db, userId);
+  const repos = await getRepositoriesByUser(userId);
   let newEntries = 0;
 
   // Step 1: RSS 수집 — 전 저장소 RSS fetch → rss_commits에 저장
   //         RSS 실패(private 저장소 등) 시 commit_cache fallback
   for (const repo of repos) {
     try {
-      const meta = resolveProviderMeta(repo);
+      const meta = await resolveProviderMeta(repo);
       if (!meta) continue;
       const result = await fetchRssCommits(
         repo.id,
@@ -64,26 +59,26 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
         repo.branch
       );
       if (result.commits.length > 0) {
-        insertRssCommits(db, result.commits);
+        await insertRssCommits(result.commits);
       } else {
         // RSS에서 커밋을 못 가져온 경우 commit_cache fallback
-        const cacheCommits = getRecentCacheAsRss(db, repo.id);
+        const cacheCommits = await getRecentCacheAsRss(repo.id);
         if (cacheCommits.length > 0) {
-          insertRssCommits(db, cacheCommits);
+          await insertRssCommits(cacheCommits);
         }
       }
       // 브랜치 자동 교정: 404 fallback으로 다른 브랜치에서 성공한 경우 DB 업데이트
       if (result.correctedBranch) {
-        db.prepare("UPDATE repositories SET branch = ? WHERE id = ?").run(result.correctedBranch, repo.id);
+        await sql`UPDATE repositories SET branch = ${result.correctedBranch} WHERE id = ${repo.id}`;
         repo.branch = result.correctedBranch;
       }
     } catch (err) {
       console.warn(`[FeedScheduler] RSS fetch failed for repo ${repo.id}:`, err);
       // RSS 자체가 예외인 경우에도 commit_cache fallback
       try {
-        const cacheCommits = getRecentCacheAsRss(db, repo.id);
+        const cacheCommits = await getRecentCacheAsRss(repo.id);
         if (cacheCommits.length > 0) {
-          insertRssCommits(db, cacheCommits);
+          await insertRssCommits(cacheCommits);
         }
       } catch { /* fallback도 실패하면 무시 */ }
     }
@@ -95,7 +90,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
   const standaloneRepoIds: number[] = [];
 
   for (const repo of repos) {
-    const projectId = getRepositoryProjectId(db, repo.id);
+    const projectId = await getRepositoryProjectId(repo.id);
     if (projectId) {
       const list = projectRepoMap.get(projectId) ?? [];
       list.push(repo.id);
@@ -109,17 +104,15 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
   for (const [projectId, repoIds] of projectRepoMap) {
     const allCommits: RssCommit[] = [];
     for (const repoId of repoIds) {
-      allCommits.push(...getUnprocessedRssCommits(db, repoId));
+      allCommits.push(...await getUnprocessedRssCommits(repoId));
     }
     if (allCommits.length === 0) continue;
 
-    const project = db
-      .prepare("SELECT name FROM projects WHERE id = ?")
-      .get(projectId) as { name: string } | undefined;
-    const milestones = getActiveMilestonesByScope(db, "project", projectId);
-    const previousSummary = getLatestMilestoneSummary(db, userId, "project", projectId) ?? undefined;
+    const [projectRow] = await sql`SELECT name FROM projects WHERE id = ${projectId}` as any[];
+    const milestones = await getActiveMilestonesByScope("project", projectId);
+    const previousSummary = await getLatestMilestoneSummary(userId, "project", projectId) ?? undefined;
     const prompt = buildBriefingPrompt({
-      scopeName: project?.name ?? "Unknown",
+      scopeName: projectRow?.name ?? "Unknown",
       commits: allCommits,
       milestones,
       previousMilestoneSummary: previousSummary,
@@ -139,7 +132,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
     const shas = allCommits.map((c) => c.sha);
     const dates = allCommits.map((c) => c.committedAt).sort();
 
-    const entryId = insertFeedEntry(db, {
+    const entryId = await insertFeedEntry({
       userId,
       scopeType: "project",
       scopeId: projectId,
@@ -156,7 +149,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
         .filter((c) => c.repositoryId === repoId)
         .map((c) => c.sha);
       if (repoShas.length > 0) {
-        markRssCommitsProcessed(db, repoShas, repoId, entryId);
+        await markRssCommitsProcessed(repoShas, repoId, entryId);
       }
     }
     newEntries++;
@@ -164,13 +157,13 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
 
   // 저장소 단위 브리핑
   for (const repoId of standaloneRepoIds) {
-    const commits = getUnprocessedRssCommits(db, repoId);
+    const commits = await getUnprocessedRssCommits(repoId);
     if (commits.length === 0) continue;
 
     const repo = repos.find((r: { id: number }) => r.id === repoId);
     const scopeName = repo ? (repo.label || `${repo.owner}/${repo.repo}`) : "Unknown";
-    const milestones = getActiveMilestonesByScope(db, "repository", repoId);
-    const previousSummary = getLatestMilestoneSummary(db, userId, "repository", repoId) ?? undefined;
+    const milestones = await getActiveMilestonesByScope("repository", repoId);
+    const previousSummary = await getLatestMilestoneSummary(userId, "repository", repoId) ?? undefined;
     const prompt = buildBriefingPrompt({ scopeName, commits, milestones, previousMilestoneSummary: previousSummary });
     const briefing = await generateText(prompt);
 
@@ -187,7 +180,7 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
     const shas = commits.map((c) => c.sha);
     const dates = commits.map((c) => c.committedAt).sort();
 
-    const entryId = insertFeedEntry(db, {
+    const entryId = await insertFeedEntry({
       userId,
       scopeType: "repository",
       scopeId: repoId,
@@ -199,20 +192,19 @@ export async function refreshFeedForUser(userId: string): Promise<{ newEntries: 
       periodEnd: dates[dates.length - 1],
     });
 
-    markRssCommitsProcessed(db, shas, repoId, entryId);
+    await markRssCommitsProcessed(shas, repoId, entryId);
     newEntries++;
   }
 
   return { newEntries };
 }
 
-function resolveProviderMeta(repo: {
+async function resolveProviderMeta(repo: {
   credential_id?: number;
   id: number;
-}): GitProviderMeta | null {
+}): Promise<GitProviderMeta | null> {
   if (!repo.credential_id) return null;
-  const db = getDb();
-  const cred = getCredentialById(db, repo.credential_id);
+  const cred = await getCredentialById(repo.credential_id);
   if (!cred?.metadata) return null;
   try {
     const meta =
@@ -227,20 +219,20 @@ function resolveProviderMeta(repo: {
  * commit_cache에서 rss_commits에 아직 없는 최근 커밋을 RssCommit 형태로 변환.
  * private 저장소 등 RSS 접근 불가 시 fallback으로 사용.
  */
-function getRecentCacheAsRss(db: Database.Database, repositoryId: number): RssCommit[] {
-  const rows = db.prepare(`
+async function getRecentCacheAsRss(repositoryId: number): Promise<RssCommit[]> {
+  const rows = await sql`
     SELECT cc.sha, cc.author, cc.message, cc.committed_at
     FROM commit_cache cc
-    WHERE cc.repository_id = ?
+    WHERE cc.repository_id = ${repositoryId}
       AND NOT EXISTS (
         SELECT 1 FROM rss_commits rc
         WHERE rc.repository_id = cc.repository_id AND rc.sha = cc.sha
       )
     ORDER BY cc.committed_at DESC
     LIMIT 50
-  `).all(repositoryId) as { sha: string; author: string; message: string; committed_at: string }[];
+  ` as any[];
 
-  return rows.map((r) => ({
+  return rows.map((r: any) => ({
     repositoryId,
     sha: r.sha,
     authorName: r.author,
@@ -248,4 +240,3 @@ function getRecentCacheAsRss(db: Database.Database, repositoryId: number): RssCo
     committedAt: r.committed_at,
   }));
 }
-

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCredentialById, updateCredential, deleteCredential } from "@/infra/db/credential";
 import { encrypt } from "@/infra/crypto/token-encryption";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,12 +18,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "token or label is required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const existing = getCredentialById(db, credId);
+  const existing = await getCredentialById(credId);
   if (!existing) return NextResponse.json({ error: "Credential not found" }, { status: 404 });
   if (existing.user_id !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  updateCredential(db, credId, {
+  await updateCredential(credId, {
     credential: token ? encrypt(token) : existing.credential,
     label: label !== undefined ? label : existing.label,
     metadata: existing.metadata,
@@ -41,11 +39,10 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   const credId = parseInt(id, 10);
   if (isNaN(credId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-  const db = getDb();
-  const existing = getCredentialById(db, credId);
+  const existing = await getCredentialById(credId);
   if (!existing) return NextResponse.json({ error: "Credential not found" }, { status: 404 });
   if (existing.user_id !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  deleteCredential(db, credId);
+  await deleteCredential(credId);
   return NextResponse.json({ message: "Credential deleted" });
 }

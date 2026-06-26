@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getProjectsByUser } from "@/infra/db/project-repository";
 import { getRepositoriesByUser } from "@/infra/db/repository";
 import { buildMilestoneParsePrompt, parseMilestoneParseResponse } from "@/core/feed/briefing-prompt";
@@ -17,9 +16,12 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = String(session.user.id);
-  const db = getDb();
-  const projects = getProjectsByUser(db, userId).map((p: any) => ({ id: p.id, name: p.name }));
-  const repos = getRepositoriesByUser(db, userId).map((r: any) => ({ id: r.id, name: `${r.owner}/${r.repo}` }));
+  const [projectsRaw, reposRaw] = await Promise.all([
+    getProjectsByUser(userId),
+    getRepositoriesByUser(userId),
+  ]);
+  const projects = projectsRaw.map((p: any) => ({ id: p.id, name: p.name }));
+  const repos = reposRaw.map((r: any) => ({ id: r.id, name: `${r.owner}/${r.repo}` }));
 
   const today = getKstToday();
   const prompt = buildMilestoneParsePrompt(body.rawInput, today, projects, repos);

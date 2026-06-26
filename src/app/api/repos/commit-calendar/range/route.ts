@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRepositoriesByUser, getCommitsByDateRange, type CacheCommit } from "@/infra/db/repository";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 function groupByDateAndRepo(commits: CacheCommit[], repos: any[]) {
   const repoMap = new Map(repos.map((r: any) => [r.id, r]));
@@ -62,9 +61,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "since must be before or equal to until" }, { status: 400 });
   }
 
-  const db = getDb();
   try {
-    let repos = getRepositoriesByUser(db, session.user.id);
+    let repos = await getRepositoriesByUser(session.user.id);
 
     if (repoIdsParam) {
       const repoIdSet = new Set(repoIdsParam.split(",").map(Number));
@@ -81,8 +79,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const commits = getCommitsByDateRange(
-      db,
+    const commits = await getCommitsByDateRange(
       repoIds,
       since,
       until,

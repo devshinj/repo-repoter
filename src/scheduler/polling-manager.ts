@@ -14,7 +14,6 @@ import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/llm/llm-client";
 import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
 import { isAmbiguousCommitMessage } from "@/core/analyzer/task-extractor";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import { getDb } from "@/infra/db/connection";
 import type { CommitRecord, GitProviderMeta } from "@/core/types";
 
 let cronTask: ScheduledTask | null = null;
@@ -61,16 +60,16 @@ export function getSchedulerStatus() {
  * 단일 저장소 동기화. 원자적 잠금(trySyncStart)으로 동시 실행 방지.
  * 이미 동기화 중이면 null 반환.
  */
-export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: string, repo: any): Promise<SyncResult | null> {
-  if (!trySyncStart(database, repo.id)) {
+export async function syncOneRepo(userId: string, repo: any): Promise<SyncResult | null> {
+  if (!await trySyncStart(repo.id)) {
     console.log(`[Sync] ${repo.owner}/${repo.repo}: already syncing, skipped`);
     return null;
   }
 
   try {
     const gitCred = repo.credential_id
-      ? getCredentialById(database, repo.credential_id)
-      : getCredentialByUserAndProvider(database, userId, "git");
+      ? await getCredentialById(repo.credential_id)
+      : await getCredentialByUserAndProvider(userId, "git");
     if (!gitCred) throw new Error("Git credential not found for sync");
 
     const token = decrypt(gitCred.credential);
@@ -83,11 +82,11 @@ export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: st
     // Language
     try {
       const language = await provider.getRepoLanguage(repo.owner, repo.repo);
-      updatePrimaryLanguage(database, repo.id, language);
+      await updatePrimaryLanguage(repo.id, language);
     } catch { /* non-critical */ }
 
     // Incremental sync
-    const latestDate = getLatestCacheDate(database, repo.id);
+    const latestDate = await getLatestCacheDate(repo.id);
     const sinceDate = latestDate
       ? new Date(new Date(latestDate).getTime() - 86400000).toISOString()
       : (() => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); })();
@@ -113,7 +112,7 @@ export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: st
 
         const newCommits = commits.filter(c => !seenShas.has(c.sha));
         // 이미 캐시된 SHA는 스킵
-        const cached = getCachedShas(database, repo.id, newCommits.map(c => c.sha));
+        const cached = await getCachedShas(repo.id, newCommits.map(c => c.sha));
         const uncachedCommits = newCommits.filter(c => !cached.has(c.sha));
 
         // listCommits에서 stats를 이미 가져온 커밋은 detail 호출 스킵
@@ -151,17 +150,17 @@ export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: st
 
     // Cache
     if (newCacheCommits.length > 0) {
-      const inserted = insertCommitCache(database, newCacheCommits);
+      const inserted = await insertCommitCache(newCacheCommits);
       if (inserted > 0) console.log(`[Sync] ${repo.owner}/${repo.repo}: cached ${inserted} new commits`);
     }
 
     if (newCommitRecords.length === 0) {
       console.log(`[Sync] ${repo.owner}/${repo.repo}: no new commits`);
-      insertSyncLogForUser(database, {
+      await insertSyncLogForUser({
         repositoryId: repo.id, userId, status: "success",
         commitsProcessed: 0, tasksCreated: 0, errorMessage: null,
       });
-      updateSyncStatus(database, repo.id, "ready");
+      await updateSyncStatus(repo.id, "ready");
       return { commitsProcessed: 0, tasksCreated: 0 };
     }
 
@@ -189,22 +188,22 @@ export async function syncOneRepo(database: ReturnType<typeof getDb>, userId: st
       tasksCreated += tasks.length;
     }
 
-    updateLastSyncedSha(database, repo.id, newCommitRecords[0].sha);
-    insertSyncLogForUser(database, {
+    await updateLastSyncedSha(repo.id, newCommitRecords[0].sha);
+    await insertSyncLogForUser({
       repositoryId: repo.id, userId, status: "success",
       commitsProcessed: newCommitRecords.length, tasksCreated, errorMessage: null,
     });
     console.log(`[Sync] ${repo.owner}/${repo.repo}: synced ${newCommitRecords.length} commits, created ${tasksCreated} tasks`);
 
-    updateSyncStatus(database, repo.id, "ready");
+    await updateSyncStatus(repo.id, "ready");
     return { commitsProcessed: newCommitRecords.length, tasksCreated };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    insertSyncLogForUser(database, {
+    await insertSyncLogForUser({
       repositoryId: repo.id, userId, status: "error",
       commitsProcessed: 0, tasksCreated: 0, errorMessage: errorMsg,
     });
-    updateSyncStatus(database, repo.id, "error");
+    await updateSyncStatus(repo.id, "error");
     console.error(`[Sync] ${repo.owner}/${repo.repo}: failed -`, errorMsg);
     throw err;
   }
@@ -214,14 +213,14 @@ export async function runSyncCycle(): Promise<void> {
   if (isRunning) { console.log("[Scheduler] Sync already in progress, skipping"); return; }
   isRunning = true;
   syncStartedAt = new Date().toISOString();
-  const database = getDb();
 
   try {
-    const userIds = getActiveUsersWithRepos(database);
+    const userIds = await getActiveUsersWithRepos();
     for (const userId of userIds) {
       try {
-        const repos = getRepositoriesByUser(database, userId).filter((r: any) => r.sync_status === "ready" || r.sync_status === "error");
-        await pMap(repos, (repo: any) => syncOneRepo(database, userId, repo).catch(() => {}), repoSyncConcurrency);
+        const allRepos = await getRepositoriesByUser(userId);
+        const repos = allRepos.filter((r: any) => r.sync_status === "ready" || r.sync_status === "error");
+        await pMap(repos, (repo: any) => syncOneRepo(userId, repo).catch(() => {}), repoSyncConcurrency);
       } catch (error) {
         console.error(`[Scheduler] User ${userId}: failed -`, error);
       }

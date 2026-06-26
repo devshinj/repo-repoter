@@ -5,21 +5,19 @@ import { decrypt } from "@/infra/crypto/token-encryption";
 import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
 import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const db = getDb();
   try {
-    const repo = getRepositoryByIdAndUser(db, Number(id), session.user.id);
+    const repo = await getRepositoryByIdAndUser(Number(id), session.user.id);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
 
     const gitCred = repo.credential_id
-      ? getCredentialById(db, repo.credential_id)
-      : getCredentialByUserAndProvider(db, session.user.id, "git");
+      ? await getCredentialById(repo.credential_id)
+      : await getCredentialByUserAndProvider(session.user.id, "git");
     if (!gitCred) return NextResponse.json({ error: "Git PAT not configured" }, { status: 400 });
 
     const token = decrypt(gitCred.credential);

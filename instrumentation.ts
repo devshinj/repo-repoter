@@ -8,7 +8,7 @@ export async function register() {
     const { startFeedScheduler } = await import("@/scheduler/feed-scheduler");
     startScheduler(15);
     startReportScheduler();
-    startHrmsScheduler();
+    await startHrmsScheduler();
     startFeedScheduler();
   }
 }

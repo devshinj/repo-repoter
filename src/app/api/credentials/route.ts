@@ -5,7 +5,6 @@ import {
 } from "@/infra/db/credential";
 import { encrypt, maskToken } from "@/infra/crypto/token-encryption";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 const validProviders = ["git"] as const;
 
@@ -13,8 +12,7 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const creds = getCredentialsByUser(db, session.user.id);
+  const creds = await getCredentialsByUser(session.user.id);
   const masked = creds.map((c: any) => ({
     id: c.id,
     provider: c.provider,
@@ -51,9 +49,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const db = getDb();
   const encrypted = encrypt(token);
-  insertCredential(db, {
+  await insertCredential({
     userId: session.user.id,
     provider,
     credential: encrypted,

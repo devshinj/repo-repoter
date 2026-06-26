@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getHrmsApiKey, upsertHrmsApiKey, deleteAllHrmsDataByUser, getHrmsStats, getMappingsByUser } from "@/infra/db/hrms";
 import { encrypt, decrypt, maskToken } from "@/infra/crypto/token-encryption";
 import { verifyApiKey } from "@/infra/hrms/hrms-client";
@@ -9,14 +8,13 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const row = getHrmsApiKey(db, session.user.id);
+  const row = await getHrmsApiKey(session.user.id);
 
   if (!row) {
     return NextResponse.json({ registered: false });
   }
 
-  const stats = getHrmsStats(db, session.user.id);
+  const stats = await getHrmsStats(session.user.id);
 
   return NextResponse.json({
     registered: true,
@@ -50,8 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API key must have 'create' permission for task registration" }, { status: 400 });
     }
 
-    const db = getDb();
-    upsertHrmsApiKey(db, {
+    await upsertHrmsApiKey({
       userId: session.user.id,
       encryptedKey: encrypt(apiKey),
       hrmsUserId: userInfo.id,
@@ -73,13 +70,11 @@ export async function DELETE() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-
   // 삭제 전 매핑 ID 보존 (스케줄러 정리용)
-  const mappingIds = getMappingsByUser(db, session.user.id).map((m: any) => m.id);
+  const mappingIds = (await getMappingsByUser(session.user.id)).map((m: any) => m.id);
 
   // 관련 데이터 전체 cascade 삭제
-  deleteAllHrmsDataByUser(db, session.user.id);
+  await deleteAllHrmsDataByUser(session.user.id);
 
   // 스케줄러 job 정리 (DB에서 매핑이 없으므로 job만 stop)
   if (mappingIds.length > 0) {

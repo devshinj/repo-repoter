@@ -1,7 +1,6 @@
 // src/scheduler/report-scheduler.ts
 import cron, { type ScheduledTask } from "node-cron";
 import { getKstYesterday, kstCronOptions } from "@/core/date-utils";
-import { getDb } from "@/infra/db/connection";
 import { getAutoReportEnabledRepos } from "@/infra/db/repository";
 import { insertReport } from "@/infra/db/report";
 import { generateReportContent } from "@/scheduler/report-generator";
@@ -35,10 +34,9 @@ export async function runDailyReportCycle(targetDate?: string): Promise<void> {
 
   isRunning = true;
   const date = targetDate ?? getYesterdayDate();
-  const db = getDb();
 
   try {
-    const repos = getAutoReportEnabledRepos(db);
+    const repos = await getAutoReportEnabledRepos();
     console.log(`[ReportScheduler] Generating daily reports for ${date} — ${repos.length} repos enabled`);
 
     for (const repo of repos) {
@@ -51,7 +49,7 @@ export async function runDailyReportCycle(targetDate?: string): Promise<void> {
         }
 
         const displayName = repo.label || `${repo.owner}/${repo.repo}`;
-        insertReport(db, {
+        await insertReport({
           userId: repo.user_id,
           repositoryId: repo.id,
           project: displayName,

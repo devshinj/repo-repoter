@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRepositoriesByUser, getCommitCountsByDateRange } from "@/infra/db/repository";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -12,9 +11,8 @@ export async function GET(request: NextRequest) {
   const until = searchParams.get("until") || undefined;
   const repoIdsParam = searchParams.get("repoIds");
 
-  const db = getDb();
   try {
-    let repos = getRepositoriesByUser(db, session.user.id);
+    let repos = await getRepositoriesByUser(session.user.id);
 
     if (repoIdsParam) {
       const repoIdSet = new Set(repoIdsParam.split(",").map(Number));
@@ -31,8 +29,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const counts = getCommitCountsByDateRange(
-      db,
+    const counts = await getCommitCountsByDateRange(
       repoIds,
       since || "1970-01-01",
       until || "2099-12-31",

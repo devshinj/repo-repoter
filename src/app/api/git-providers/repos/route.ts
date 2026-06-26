@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { listGitHubRepos } from "@/infra/git-provider/github-api";
@@ -18,8 +17,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "credentialId is required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const cred = getCredentialById(db, Number(credentialId));
+  const cred = await getCredentialById(Number(credentialId));
   if (!cred) {
     return NextResponse.json({ error: "Credential not found" }, { status: 404 });
   }

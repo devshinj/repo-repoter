@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertReport, getReportsByUser } from "@/infra/db/report";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const reports = getReportsByUser(db, session.user.id);
+  const reports = await getReportsByUser(session.user.id);
   return NextResponse.json(reports);
 }
 
@@ -23,8 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "repositoryId, project, date, title are required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const id = insertReport(db, {
+  const id = await insertReport({
     userId: session.user.id,
     repositoryId,
     project,

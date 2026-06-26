@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getHrmsApiKey, getMappingsByUser, insertMapping } from "@/infra/db/hrms";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { getProject } from "@/infra/hrms/hrms-client";
@@ -10,8 +9,7 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const mappings = getMappingsByUser(db, session.user.id);
+  const mappings = await getMappingsByUser(session.user.id);
   return NextResponse.json(mappings);
 }
 
@@ -26,8 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "hrmsProjectId and repositoryIds[] are required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const keyRow = getHrmsApiKey(db, session.user.id);
+  const keyRow = await getHrmsApiKey(session.user.id);
   if (!keyRow) {
     return NextResponse.json({ error: "HRMS API key not registered" }, { status: 400 });
   }
@@ -36,7 +33,7 @@ export async function POST(request: NextRequest) {
     const apiKey = decrypt(keyRow.encrypted_key);
     const project = await getProject(apiKey, hrmsProjectId);
 
-    const mappingId = insertMapping(db, {
+    const mappingId = await insertMapping({
       userId: session.user.id,
       hrmsProjectId,
       hrmsProjectName: project.name,

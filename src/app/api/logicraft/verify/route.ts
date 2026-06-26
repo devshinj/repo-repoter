@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getLogicraftApiKey } from "@/infra/db/logicraft";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { listProjects } from "@/infra/logicraft/logicraft-client";
@@ -14,8 +13,7 @@ export async function POST(request: NextRequest) {
 
   // "__stored__" 이면 DB에 저장된 key 사용
   if (apiKey === "__stored__") {
-    const db = getDb();
-    const row = getLogicraftApiKey(db, session.user.id);
+    const row = await getLogicraftApiKey(session.user.id);
     if (!row) return NextResponse.json({ error: "No stored LogiCraft API key" }, { status: 400 });
     apiKey = decrypt(row.encrypted_key);
   }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getHrmsApiKey } from "@/infra/db/hrms";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { listCommonCodes } from "@/infra/hrms/hrms-client";
@@ -9,8 +8,7 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const keyRow = getHrmsApiKey(db, session.user.id);
+  const keyRow = await getHrmsApiKey(session.user.id);
   if (!keyRow) {
     return NextResponse.json({ error: "HRMS API key not registered" }, { status: 400 });
   }

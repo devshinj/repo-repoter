@@ -1,5 +1,5 @@
 // src/scheduler/report-generator.ts
-import { getDb } from "@/infra/db/connection";
+import { sql } from "@/infra/db/connection";
 import { generateText } from "@/infra/llm/llm-client";
 
 export interface CommitEntry {
@@ -14,29 +14,27 @@ export interface CommitEntry {
   commitDate?: string;
 }
 
-export function collectCommitsForDateFromCache(
+export async function collectCommitsForDateFromCache(
   repositoryId: number,
   date: string,
   authors?: string[]
-): CommitEntry[] {
-  const db = getDb();
+): Promise<CommitEntry[]> {
+  // Fetch all commits for the date, then filter by authors in JS
+  const rows = await sql`
+    SELECT sha, branch, author, message, committed_at, committed_date, additions, deletions, files_changed
+    FROM commit_cache
+    WHERE repository_id = ${repositoryId}
+      AND committed_date = ${date}
+    ORDER BY committed_at ASC
+  ` as any[];
 
-  let sql = `SELECT sha, branch, author, message, committed_at, committed_date, additions, deletions, files_changed
-    FROM commit_cache WHERE repository_id = ? AND committed_date = ?`;
-  const params: (string | number)[] = [repositoryId, date];
+  const filtered = (authors && authors.length > 0)
+    ? rows.filter((r: any) => authors.some(a => r.author?.toLowerCase().includes(a.toLowerCase())))
+    : rows;
 
-  if (authors && authors.length > 0) {
-    const authorClauses = authors.map(() => "author LIKE ?").join(" OR ");
-    sql += ` AND (${authorClauses})`;
-    params.push(...authors.map(a => `%${a}%`));
-  }
-
-  sql += " ORDER BY committed_at ASC";
-
-  const rows = db.prepare(sql).all(...params) as any[];
   const seenShas = new Set<string>();
 
-  return rows
+  return filtered
     .filter(r => {
       if (seenShas.has(r.sha)) return false;
       seenShas.add(r.sha);
@@ -48,7 +46,7 @@ export function collectCommitsForDateFromCache(
       message: r.message,
       author: r.author,
       date: r.committed_at,
-      filesChanged: r.files_changed ? JSON.parse(r.files_changed) : [],
+      filesChanged: r.files_changed ? (Array.isArray(r.files_changed) ? r.files_changed : JSON.parse(r.files_changed)) : [],
       additions: r.additions ?? 0,
       deletions: r.deletions ?? 0,
       commitDate: r.committed_date,
@@ -176,7 +174,7 @@ export async function generateReportContent(
     ? repo.git_author.split(",").map((a) => a.trim()).filter(Boolean)
     : undefined;
 
-  const commits = collectCommitsForDateFromCache(repo.id, date, authors);
+  const commits = await collectCommitsForDateFromCache(repo.id, date, authors);
 
   if (commits.length === 0) return null;
 

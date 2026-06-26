@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getHrmsApiKey } from "@/infra/db/hrms";
 import {
   getLogicraftApiKey,
@@ -31,18 +30,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "mappingId is required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const mapping = getLogicraftMappingById(db, mappingId);
+  const mapping = await getLogicraftMappingById(mappingId);
   if (!mapping || mapping.user_id !== session.user.id) {
     return NextResponse.json({ error: "Mapping not found" }, { status: 404 });
   }
 
-  const hrmsKeyRow = getHrmsApiKey(db, session.user.id);
+  const hrmsKeyRow = await getHrmsApiKey(session.user.id);
   if (!hrmsKeyRow) {
     return NextResponse.json({ error: "HRMS API key not registered" }, { status: 400 });
   }
 
-  const logicraftKeyRow = getLogicraftApiKey(db, session.user.id);
+  const logicraftKeyRow = await getLogicraftApiKey(session.user.id);
   if (!logicraftKeyRow) {
     return NextResponse.json({ error: "LogiCraft API key not registered" }, { status: 400 });
   }
@@ -52,7 +50,7 @@ export async function POST(request: NextRequest) {
   const logicraftApiKey = decrypt(logicraftKeyRow.encrypted_key);
 
   // 중복 체크
-  if (hasLogicraftSuccessLog(db, mappingId, date) && !force) {
+  if (await hasLogicraftSuccessLog(mappingId, date) && !force) {
     let existsInHrms = false;
     try {
       const tasks = await listTasks(hrmsApiKey, {
@@ -87,7 +85,7 @@ export async function POST(request: NextRequest) {
   } catch { /* 제안 조회 실패 무시 */ }
 
   if (modifiedItems.length === 0 && proposals.length === 0) {
-    insertLogicraftTaskLog(db, {
+    await insertLogicraftTaskLog({
       mappingId,
       hrmsTaskId: null,
       targetDate: date,
@@ -123,7 +121,7 @@ export async function POST(request: NextRequest) {
         });
         if (tasks.length > 0) existingTaskId = tasks[0].id;
       } catch {
-        const prevLog = getLastLogicraftSuccessLog(db, mappingId, date);
+        const prevLog = await getLastLogicraftSuccessLog(mappingId, date);
         existingTaskId = prevLog?.hrms_task_id ?? null;
       }
 
@@ -150,13 +148,13 @@ export async function POST(request: NextRequest) {
       action = "created";
     }
 
-    insertLogicraftTaskLog(db, {
+    await insertLogicraftTaskLog({
       mappingId, hrmsTaskId, targetDate: date, title, description, status: "success", errorMessage: null,
     });
 
     return NextResponse.json({ message: action === "updated" ? "Task updated" : "Task registered", hrmsTaskId, title, estimatedMinutes, action }, { status: 201 });
   } catch (err: any) {
-    insertLogicraftTaskLog(db, {
+    await insertLogicraftTaskLog({
       mappingId, hrmsTaskId: null, targetDate: date, title: "등록 실패", description: "", status: "error", errorMessage: err.message,
     });
     return NextResponse.json({ error: err.message }, { status: 500 });

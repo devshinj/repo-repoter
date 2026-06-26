@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import {
   getHrmsApiKey,
   getMappingById,
@@ -30,8 +29,6 @@ async function executeRegistration(
   force: boolean,
   hrmsUserId: string | null,
 ): Promise<void> {
-  const db = getDb();
-
   try {
     // ── 1단계: 저장소 동기화 (부분 실패 허용) ──
     const syncThresholdMs = 5 * 60 * 1000;
@@ -50,12 +47,12 @@ async function executeRegistration(
         repoTotal,
       });
 
-      const lastSync = getRepoLastSyncAt(db, repo.id);
+      const lastSync = await getRepoLastSyncAt(repo.id);
       if (lastSync && Date.now() - new Date(lastSync).getTime() < syncThresholdMs) {
         continue;
       }
       try {
-        const result = await syncOneRepo(db, userId, repo);
+        const result = await syncOneRepo(userId, repo);
         if (result === null) {
           failedRepos.push(repoLabel);
           emitJobEvent(logId, {
@@ -86,7 +83,7 @@ async function executeRegistration(
         message: "모든 저장소 동기화 실패",
         error: failedRepos.join(", "),
       });
-      updateTaskLog(db, logId, { status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}` });
+      await updateTaskLog(logId, { status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}` });
       return;
     }
 
@@ -99,14 +96,14 @@ async function executeRegistration(
         allAuthors.push(...authors);
       }
     }
-    const cacheCommits = getCommitsByDateRange(
-      db, repoIds, date, date,
+    const cacheCommits = await getCommitsByDateRange(
+      repoIds, date, date,
       allAuthors.length > 0 ? allAuthors : undefined,
     ) as any[];
 
     if (cacheCommits.length === 0) {
       emitJobEvent(logId, { step: "done", message: "해당 날짜에 커밋이 없어 건너뛰었습니다." });
-      updateTaskLog(db, logId, { status: "skipped", errorMessage: null });
+      await updateTaskLog(logId, { status: "skipped", errorMessage: null });
       return;
     }
 
@@ -152,7 +149,7 @@ async function executeRegistration(
         });
         if (tasks.length > 0) existingTaskId = tasks[0].id;
       } catch {
-        const prevLog = getLastSuccessLog(db, mapping.id, date);
+        const prevLog = await getLastSuccessLog(mapping.id, date);
         existingTaskId = prevLog?.hrms_task_id ?? null;
       }
 
@@ -182,7 +179,7 @@ async function executeRegistration(
     }
 
     // ── 완료 ──
-    updateTaskLog(db, logId, { status: "success", hrmsTaskId, title, description });
+    await updateTaskLog(logId, { status: "success", hrmsTaskId, title, description });
     emitJobEvent(logId, {
       step: "done",
       message: action === "updated" ? "기존 업무 업데이트 완료" : "업무 등록 완료",
@@ -190,7 +187,7 @@ async function executeRegistration(
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    updateTaskLog(db, logId, { status: "error", errorMessage: errorMsg });
+    await updateTaskLog(logId, { status: "error", errorMessage: errorMsg });
     emitJobEvent(logId, { step: "error", message: "등록 실패", error: errorMsg });
   }
 }
@@ -206,19 +203,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "mappingId is required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const mapping = getMappingById(db, mappingId);
+  const mapping = await getMappingById(mappingId);
   if (!mapping || mapping.user_id !== session.user.id) {
     return NextResponse.json({ error: "Mapping not found" }, { status: 404 });
   }
 
   // 이미 진행 중인 작업이 있으면 해당 jobId 반환
-  const existing = getInProgressLog(db, mappingId);
+  const existing = await getInProgressLog(mappingId);
   if (existing) {
     return NextResponse.json({ jobId: existing.id, resuming: true });
   }
 
-  const keyRow = getHrmsApiKey(db, session.user.id);
+  const keyRow = await getHrmsApiKey(session.user.id);
   if (!keyRow) {
     return NextResponse.json({ error: "HRMS API key not registered" }, { status: 400 });
   }
@@ -227,7 +223,7 @@ export async function POST(request: NextRequest) {
   const apiKey = decrypt(keyRow.encrypted_key);
 
   // 중복 체크 (동기, 빠르게 완료됨)
-  if (hasSuccessLog(db, mappingId, date) && !force) {
+  if (await hasSuccessLog(mappingId, date) && !force) {
     let existsInHrms = false;
     try {
       const tasks = await listTasks(apiKey, {
@@ -242,7 +238,7 @@ export async function POST(request: NextRequest) {
   }
 
   // in_progress 로그 삽입 + job 생성 → 즉시 응답
-  const logId = insertTaskLog(db, {
+  const logId = await insertTaskLog({
     mappingId,
     hrmsTaskId: null,
     targetDate: date,

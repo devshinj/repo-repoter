@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { insertUser, getUserByEmail } from "@/infra/db/repository";
-import { getDb } from "@/infra/db/connection";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -15,14 +14,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "비밀번호는 6자 이상이어야 합니다" }, { status: 400 });
   }
 
-  const db = getDb();
-  const existing = getUserByEmail(db, email);
+  const existing = await getUserByEmail(email);
   if (existing) {
     return NextResponse.json({ error: "이미 등록된 이메일입니다" }, { status: 409 });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  insertUser(db, { name, email, passwordHash });
+  await insertUser({ name, email, passwordHash });
 
   return NextResponse.json({ message: "회원가입 완료" }, { status: 201 });
 }

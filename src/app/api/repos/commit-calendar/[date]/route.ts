@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRepositoriesByUser, getCommitsByDate, type CacheCommit } from "@/infra/db/repository";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 function groupByRepo(commits: CacheCommit[], repos: any[]) {
   const repoMap = new Map(repos.map((r: any) => [r.id, r]));
@@ -49,9 +48,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { searchParams } = new URL(request.url);
   const repoIdsParam = searchParams.get("repoIds");
 
-  const db = getDb();
   try {
-    let repos = getRepositoriesByUser(db, session.user.id);
+    let repos = await getRepositoriesByUser(session.user.id);
 
     if (repoIdsParam) {
       const repoIdSet = new Set(repoIdsParam.split(",").map(Number));
@@ -68,8 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    const commits = getCommitsByDate(
-      db,
+    const commits = await getCommitsByDate(
       repoIds,
       date,
       allAuthors.length > 0 ? allAuthors : undefined

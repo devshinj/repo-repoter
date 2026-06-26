@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRepositoryByIdAndUser } from "@/infra/db/repository";
 import { insertReport, updateReportStatus } from "@/infra/db/report";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { generateText } from "@/infra/llm/llm-client";
 import {
   CommitEntry,
@@ -35,9 +34,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "date or dateRange is required" }, { status: 400 });
   }
 
-  const db = getDb();
   try {
-    const repo = getRepositoryByIdAndUser(db, Number(repoId), session.user.id);
+    const repo = await getRepositoryByIdAndUser(Number(repoId), session.user.id);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
 
     const isRange = Boolean(dateRange);
@@ -47,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (asyncMode) {
       // 비동기 모드: pending 상태로 먼저 저장 후 백그라운드에서 생성
       const reportDate = isRange ? dateRange!.since : date!;
-      const pendingId = insertReport(db, {
+      const pendingId = await insertReport({
         userId: session.user.id,
         repositoryId: Number(repoId),
         project: displayName,
@@ -70,25 +68,25 @@ export async function POST(request: NextRequest) {
             const end = new Date(dateRange!.until);
             while (current <= end) {
               const d = current.toISOString().slice(0, 10);
-              const dayCommits = collectCommitsForDateFromCache(repo.id, d, authors);
+              const dayCommits = await collectCommitsForDateFromCache(repo.id, d, authors);
               allCommits = allCommits.concat(dayCommits);
               current.setDate(current.getDate() + 1);
             }
           } else {
-            allCommits = collectCommitsForDateFromCache(repo.id, date!, authors);
+            allCommits = await collectCommitsForDateFromCache(repo.id, date!, authors);
           }
 
           if (allCommits.length === 0) {
-            updateReportStatus(db, pendingId, "error", { title: `[${displayName}] 업무 보고서`, content: "해당 기간에 커밋이 없습니다." });
+            await updateReportStatus(pendingId, "error", { title: `[${displayName}] 업무 보고서`, content: "해당 기간에 커밋이 없습니다." });
             return;
           }
 
           const prompt = buildPrompt(repo.owner, repo.repo, repo.label, dateLabel, allCommits, isRange);
           const text = await generateText(prompt);
           const parsed = parseGeneratedReport(text, displayName);
-          updateReportStatus(db, pendingId, "completed", parsed);
+          await updateReportStatus(pendingId, "completed", parsed);
         } catch (err: any) {
-          updateReportStatus(db, pendingId, "error", {
+          await updateReportStatus(pendingId, "error", {
             title: `[${displayName}] 업무 보고서`,
             content: err?.message ?? "보고서 생성 중 오류 발생",
           });
@@ -106,12 +104,12 @@ export async function POST(request: NextRequest) {
       const end = new Date(dateRange!.until);
       while (current <= end) {
         const d = current.toISOString().slice(0, 10);
-        const dayCommits = collectCommitsForDateFromCache(repo.id, d, syncAuthors);
+        const dayCommits = await collectCommitsForDateFromCache(repo.id, d, syncAuthors);
         allCommits = allCommits.concat(dayCommits);
         current.setDate(current.getDate() + 1);
       }
     } else {
-      allCommits = collectCommitsForDateFromCache(repo.id, date!, syncAuthors);
+      allCommits = await collectCommitsForDateFromCache(repo.id, date!, syncAuthors);
     }
 
     if (allCommits.length === 0) {

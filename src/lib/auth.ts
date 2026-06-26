@@ -2,7 +2,6 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { getUserByEmail, upsertOAuthUser } from "@/infra/db/repository";
-import { getDb } from "@/infra/db/connection";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -22,8 +21,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const password = credentials?.password as string;
         if (!email || !password) return null;
 
-        const db = getDb();
-        const user = getUserByEmail(db, email);
+        const user = await getUserByEmail(email);
         if (!user) return null;
 
         const valid = await bcrypt.compare(password, user.password_hash);
@@ -67,15 +65,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      const db = getDb();
-
       if (account?.provider === "credentials") {
-        const dbUser = getUserByEmail(db, user.email || "");
+        const dbUser = await getUserByEmail(user.email || "");
         if (dbUser && !dbUser.is_active) return false;
       }
 
       if (account?.provider && account.provider !== "credentials" && profile) {
-        const dbUser = upsertOAuthUser(db, {
+        const dbUser = await upsertOAuthUser({
           name: user.name || profile.name as string || "",
           email: user.email || profile.email as string || "",
           provider: account.provider,

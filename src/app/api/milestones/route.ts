@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { insertMilestone, getMilestonesByUser } from "@/infra/db/milestone-repository";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const milestones = getMilestonesByUser(db, String(session.user.id));
+  const milestones = await getMilestonesByUser(String(session.user.id));
   return NextResponse.json(milestones);
 }
 
@@ -24,8 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "projectId or repositoryId required" }, { status: 400 });
   }
 
-  const db = getDb();
-  const id = insertMilestone(db, {
+  const id = await insertMilestone({
     userId: String(session.user.id),
     projectId: body.projectId || null,
     repositoryId: body.repositoryId || null,

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/admin-auth";
-import { getDb } from "@/infra/db/connection";
 import { getAllUsers, getUserStats } from "@/infra/db/admin-repository";
 
 export async function GET(request: NextRequest) {
@@ -8,9 +7,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = getDb();
-  const users = getAllUsers(db);
-  const stats = getUserStats(db);
+  const [users, stats] = await Promise.all([getAllUsers(), getUserStats()]);
 
   return NextResponse.json({ users, stats });
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/admin-auth";
-import { getDb } from "@/infra/db/connection";
 import { setUserActive, deleteUser } from "@/infra/db/admin-repository";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,8 +15,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "isActive (boolean) 필수" }, { status: 400 });
   }
 
-  const db = getDb();
-  setUserActive(db, Number(id), isActive);
+  await setUserActive(Number(id), isActive);
 
   return NextResponse.json({ ok: true });
 }
@@ -28,8 +26,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   const { id } = await params;
-  const db = getDb();
-  deleteUser(db, Number(id));
+  await deleteUser(Number(id));
 
   return NextResponse.json({ ok: true });
 }

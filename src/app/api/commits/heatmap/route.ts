@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHeatmapCounts } from "@/infra/db/repository";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getKstToday, toKstDateString } from "@/core/date-utils";
 
 export async function GET(request: NextRequest) {
@@ -17,7 +16,6 @@ export async function GET(request: NextRequest) {
   sinceDate.setMonth(sinceDate.getMonth() - months);
   const since = toKstDateString(sinceDate);
 
-  const db = getDb();
-  const data = getHeatmapCounts(db, session.user.id, since, until);
+  const data = await getHeatmapCounts(session.user.id, since, until);
   return NextResponse.json({ data, since, until });
 }

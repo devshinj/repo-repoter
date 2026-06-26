@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getLogicraftMappingsByUser, insertLogicraftMapping } from "@/infra/db/logicraft";
 import { refreshLogicraftJob } from "@/scheduler/hrms-scheduler";
 
@@ -8,8 +7,7 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const mappings = getLogicraftMappingsByUser(db, session.user.id);
+  const mappings = await getLogicraftMappingsByUser(session.user.id);
   return NextResponse.json(mappings);
 }
 
@@ -24,10 +22,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "hrmsProjectId and logicraftProjectId are required" }, { status: 400 });
   }
 
-  const db = getDb();
-
   try {
-    const id = insertLogicraftMapping(db, {
+    const id = await insertLogicraftMapping({
       userId: session.user.id,
       hrmsProjectId,
       hrmsProjectName: hrmsProjectName ?? "",

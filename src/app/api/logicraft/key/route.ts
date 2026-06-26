@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 import { getLogicraftApiKey, upsertLogicraftApiKey, deleteLogicraftApiKey } from "@/infra/db/logicraft";
 import { encrypt, decrypt, maskToken } from "@/infra/crypto/token-encryption";
 import { verifyApiKey } from "@/infra/logicraft/logicraft-client";
@@ -9,8 +8,7 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  const row = getLogicraftApiKey(db, session.user.id);
+  const row = await getLogicraftApiKey(session.user.id);
 
   if (!row) {
     return NextResponse.json({ registered: false });
@@ -37,8 +35,7 @@ export async function POST(request: NextRequest) {
   try {
     const projects = await verifyApiKey(apiKey);
 
-    const db = getDb();
-    upsertLogicraftApiKey(db, {
+    await upsertLogicraftApiKey({
       userId: session.user.id,
       encryptedKey: encrypt(apiKey),
     });
@@ -56,7 +53,6 @@ export async function DELETE() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
-  deleteLogicraftApiKey(db, session.user.id);
+  await deleteLogicraftApiKey(session.user.id);
   return NextResponse.json({ message: "LogiCraft API key deleted" });
 }

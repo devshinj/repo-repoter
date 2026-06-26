@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRepositoryByIdAndUser } from "@/infra/db/repository";
+import { sql } from "@/infra/db/connection";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -11,26 +11,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { searchParams } = new URL(request.url);
   const limit = Math.min(Number(searchParams.get("limit") || "50"), 200);
 
-  const db = getDb();
   try {
-    const repo = getRepositoryByIdAndUser(db, Number(id), session.user.id);
+    const repo = await getRepositoryByIdAndUser(Number(id), session.user.id);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
 
     const branch = searchParams.get("branch");
 
     let rows: any[];
     if (branch) {
-      rows = db.prepare(
-        `SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
-         FROM commit_cache WHERE repository_id = ? AND branch = ?
-         ORDER BY committed_at DESC LIMIT ?`
-      ).all(repo.id, branch, limit) as any[];
+      rows = await sql`
+        SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
+        FROM commit_cache WHERE repository_id = ${repo.id} AND branch = ${branch}
+        ORDER BY committed_at DESC LIMIT ${limit}
+      ` as any[];
     } else {
-      rows = db.prepare(
-        `SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
-         FROM commit_cache WHERE repository_id = ?
-         ORDER BY committed_at DESC LIMIT ?`
-      ).all(repo.id, limit) as any[];
+      rows = await sql`
+        SELECT sha, branch, author, message, committed_at, additions, deletions, files_changed
+        FROM commit_cache WHERE repository_id = ${repo.id}
+        ORDER BY committed_at DESC LIMIT ${limit}
+      ` as any[];
     }
 
     const commits = rows.map((r: any) => ({
@@ -41,7 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       repoOwner: repo.owner,
       repoName: repo.repo,
       branch: r.branch,
-      filesChanged: r.files_changed ? JSON.parse(r.files_changed) : [],
+      filesChanged: r.files_changed ? (Array.isArray(r.files_changed) ? r.files_changed : JSON.parse(r.files_changed)) : [],
       additions: r.additions ?? 0,
       deletions: r.deletions ?? 0,
     }));

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/admin-auth";
-import { getDb } from "@/infra/db/connection";
 import { toggleHrmsAutoRegister } from "@/infra/db/admin-repository";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,8 +15,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "enabled (boolean) 필수" }, { status: 400 });
   }
 
-  const db = getDb();
-  toggleHrmsAutoRegister(db, Number(id), enabled);
+  await toggleHrmsAutoRegister(Number(id), enabled);
 
   return NextResponse.json({ ok: true });
 }

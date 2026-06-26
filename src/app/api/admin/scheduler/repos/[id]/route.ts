@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/admin-auth";
-import { getDb } from "@/infra/db/connection";
 import { toggleRepoActive } from "@/infra/db/admin-repository";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,8 +15,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "isActive (boolean) 필수" }, { status: 400 });
   }
 
-  const db = getDb();
-  toggleRepoActive(db, Number(id), isActive);
+  await toggleRepoActive(Number(id), isActive);
 
   return NextResponse.json({ ok: true });
 }

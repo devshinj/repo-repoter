@@ -1,6 +1,5 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { getKstYesterday, kstCronOptions } from "@/core/date-utils";
-import { getDb } from "@/infra/db/connection";
 import {
   getAutoRegisterMappings,
   getMappingById,
@@ -16,6 +15,7 @@ import {
   insertLogicraftTaskLog,
 } from "@/infra/db/logicraft";
 import { getCommitsByDateRange, getRepoLastSyncAt } from "@/infra/db/repository";
+import { sql } from "@/infra/db/connection";
 import { syncOneRepo } from "@/scheduler/polling-manager";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
@@ -32,15 +32,14 @@ function getYesterdayDate(): string {
 }
 
 async function executeRegistration(mappingId: number): Promise<void> {
-  const db = getDb();
-  const mapping = getMappingById(db, mappingId);
+  const mapping = await getMappingById(mappingId);
   if (!mapping) return;
 
   const date = getYesterdayDate();
 
-  const keyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
+  const [keyRow] = await sql`SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ${mapping.user_id}` as any[];
   if (!keyRow) {
-    insertTaskLog(db, {
+    await insertTaskLog({
       mappingId, hrmsTaskId: null, targetDate: date,
       title: "등록 실패", description: "",
       status: "error", errorMessage: "HRMS API key not registered",
@@ -51,7 +50,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
   }
 
   // 중복 체크: 로컬 성공 로그 + HRMS 실제 존재 여부 모두 확인
-  if (hasSuccessLog(db, mappingId, date)) {
+  if (await hasSuccessLog(mappingId, date)) {
     try {
       const hrmsApiKey = decrypt(keyRow.encrypted_key);
       const tasks = await listTasks(hrmsApiKey, {
@@ -75,12 +74,12 @@ async function executeRegistration(mappingId: number): Promise<void> {
   const failedRepos: string[] = [];
   for (const repo of mapping.repos) {
     const repoLabel = repo.label || `${repo.owner}/${repo.repo}`;
-    const lastSync = getRepoLastSyncAt(db, repo.id);
+    const lastSync = await getRepoLastSyncAt(repo.id);
     if (lastSync && Date.now() - new Date(lastSync).getTime() < syncThresholdMs) {
       continue;
     }
     try {
-      const result = await syncOneRepo(db, mapping.user_id, repo);
+      const result = await syncOneRepo(mapping.user_id, repo);
       if (result === null) {
         failedRepos.push(repoLabel);
         console.warn(`[HrmsScheduler] mapping=${mappingId}: sync conflict for ${repoLabel}, skipping repo`);
@@ -92,7 +91,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
   }
 
   if (failedRepos.length === mapping.repos.length) {
-    insertTaskLog(db, {
+    await insertTaskLog({
       mappingId, hrmsTaskId: null, targetDate: date,
       title: "등록 실패", description: "",
       status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}`,
@@ -114,13 +113,13 @@ async function executeRegistration(mappingId: number): Promise<void> {
       allAuthors.push(...authors);
     }
   }
-  const cacheCommits = getCommitsByDateRange(
-    db, repoIds, date, date,
+  const cacheCommits = await getCommitsByDateRange(
+    repoIds, date, date,
     allAuthors.length > 0 ? allAuthors : undefined,
   ) as any[];
 
   if (cacheCommits.length === 0) {
-    insertTaskLog(db, {
+    await insertTaskLog({
       mappingId, hrmsTaskId: null, targetDate: date,
       title: "건너뜀", description: "",
       status: "skipped", errorMessage: failedRepos.length > 0
@@ -183,7 +182,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
       timeSpentMinutes: estimatedMinutes,
     });
 
-    insertTaskLog(db, {
+    await insertTaskLog({
       mappingId,
       hrmsTaskId: created.id,
       targetDate: date,
@@ -196,7 +195,7 @@ async function executeRegistration(mappingId: number): Promise<void> {
 
     console.log(`[HrmsScheduler] mapping=${mappingId}: registered task #${created.id} for ${date}`);
   } catch (err: any) {
-    insertTaskLog(db, {
+    await insertTaskLog({
       mappingId,
       hrmsTaskId: null,
       targetDate: date,
@@ -217,21 +216,22 @@ export function refreshJob(mappingId: number): void {
     jobs.delete(mappingId);
   }
 
-  const db = getDb();
-  const mapping = getMappingById(db, mappingId);
-  if (!mapping || !mapping.auto_register) return;
+  // Async job initialization — fetch mapping and schedule
+  (async () => {
+    const mapping = await getMappingById(mappingId);
+    if (!mapping || !mapping.auto_register) return;
 
-  const cronExpr = mapping.cron_time || "0 9 * * 1-5";
-  const task = cron.schedule(cronExpr, () => {
-    executeRegistration(mappingId).catch(console.error);
-  }, kstCronOptions);
-  jobs.set(mappingId, task);
-  console.log(`[HrmsScheduler] Job registered for mapping=${mappingId} (${cronExpr})`);
+    const cronExpr = mapping.cron_time || "0 9 * * 1-5";
+    const task = cron.schedule(cronExpr, () => {
+      executeRegistration(mappingId).catch(console.error);
+    }, kstCronOptions);
+    jobs.set(mappingId, task);
+    console.log(`[HrmsScheduler] Job registered for mapping=${mappingId} (${cronExpr})`);
+  })().catch(console.error);
 }
 
-export function startHrmsScheduler(): void {
-  const db = getDb();
-  const mappings = getAutoRegisterMappings(db);
+export async function startHrmsScheduler(): Promise<void> {
+  const mappings = await getAutoRegisterMappings();
 
   for (const m of mappings) {
     const cronExpr = m.cron_time || "0 9 * * 1-5";
@@ -242,7 +242,7 @@ export function startHrmsScheduler(): void {
   }
 
   // LogiCraft 자동 등록 매핑
-  const lcMappings = getAutoRegisterLogicraftMappings(db);
+  const lcMappings = await getAutoRegisterLogicraftMappings();
   for (const m of lcMappings) {
     const cronExpr = m.cron_time || "0 9 * * 1-5";
     const task = cron.schedule(cronExpr, () => {
@@ -271,14 +271,13 @@ function isOnDate(isoTimestamp: string, targetDate: string): boolean {
 }
 
 async function executeLogicraftRegistration(mappingId: number): Promise<void> {
-  const db = getDb();
-  const mapping = getLogicraftMappingById(db, mappingId);
+  const mapping = await getLogicraftMappingById(mappingId);
   if (!mapping) return;
 
   const date = getYesterdayDate();
 
-  const logicraftKeyRow = getLogicraftApiKey(db, mapping.user_id);
-  const hrmsKeyRow = db.prepare("SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ?").get(mapping.user_id) as any;
+  const logicraftKeyRow = await getLogicraftApiKey(mapping.user_id);
+  const [hrmsKeyRow] = await sql`SELECT encrypted_key, hrms_user_id FROM hrms_api_keys WHERE user_id = ${mapping.user_id}` as any[];
 
   if (!logicraftKeyRow || !hrmsKeyRow) {
     console.error(`[HrmsScheduler] logicraft mapping=${mappingId}: missing API keys`);
@@ -289,7 +288,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
   const hrmsApiKey = decrypt(hrmsKeyRow.encrypted_key);
 
   // 중복 체크: 로컬 성공 로그 + HRMS 실제 존재 여부 모두 확인
-  if (hasLogicraftSuccessLog(db, mappingId, date)) {
+  if (await hasLogicraftSuccessLog(mappingId, date)) {
     try {
       const tasks = await listTasks(hrmsApiKey, {
         projectId: mapping.hrms_project_id,
@@ -351,7 +350,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
       timeSpentMinutes: estimatedMinutes,
     });
 
-    insertLogicraftTaskLog(db, {
+    await insertLogicraftTaskLog({
       mappingId,
       hrmsTaskId: created.id,
       targetDate: date,
@@ -364,7 +363,7 @@ async function executeLogicraftRegistration(mappingId: number): Promise<void> {
 
     console.log(`[HrmsScheduler] logicraft mapping=${mappingId}: registered task #${created.id} for ${date}`);
   } catch (err: any) {
-    insertLogicraftTaskLog(db, {
+    await insertLogicraftTaskLog({
       mappingId,
       hrmsTaskId: null,
       targetDate: date,
@@ -385,14 +384,16 @@ export function refreshLogicraftJob(mappingId: number): void {
     logicraftJobs.delete(mappingId);
   }
 
-  const db = getDb();
-  const mapping = getLogicraftMappingById(db, mappingId);
-  if (!mapping || !mapping.auto_register) return;
+  // Async job initialization
+  (async () => {
+    const mapping = await getLogicraftMappingById(mappingId);
+    if (!mapping || !mapping.auto_register) return;
 
-  const cronExpr = mapping.cron_time || "0 9 * * 1-5";
-  const task = cron.schedule(cronExpr, () => {
-    executeLogicraftRegistration(mappingId).catch(console.error);
-  }, kstCronOptions);
-  logicraftJobs.set(mappingId, task);
-  console.log(`[HrmsScheduler] LogiCraft job registered for mapping=${mappingId} (${cronExpr})`);
+    const cronExpr = mapping.cron_time || "0 9 * * 1-5";
+    const task = cron.schedule(cronExpr, () => {
+      executeLogicraftRegistration(mappingId).catch(console.error);
+    }, kstCronOptions);
+    logicraftJobs.set(mappingId, task);
+    console.log(`[HrmsScheduler] LogiCraft job registered for mapping=${mappingId} (${cronExpr})`);
+  })().catch(console.error);
 }

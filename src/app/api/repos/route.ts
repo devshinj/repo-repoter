@@ -14,13 +14,13 @@ import {
   trySyncStart,
   type CacheCommit,
 } from "@/infra/db/repository";
+import { sql } from "@/infra/db/connection";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { parseGitUrl } from "@/infra/git/parse-git-url";
 import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
 import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/infra/db/connection";
 
 const detailConcurrency = 5;
 
@@ -37,7 +37,6 @@ async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: 
 }
 
 async function initialSync(
-  db: ReturnType<typeof getDb>,
   repoId: number,
   owner: string,
   repo: string,
@@ -45,7 +44,7 @@ async function initialSync(
   meta: GitProviderMeta,
   token: string
 ): Promise<void> {
-  if (!trySyncStart(db, repoId)) {
+  if (!await trySyncStart(repoId)) {
     console.log(`[Repos] ${owner}/${repo}: already syncing, skipped initial sync`);
     return;
   }
@@ -54,7 +53,7 @@ async function initialSync(
 
     try {
       const language = await provider.getRepoLanguage(owner, repo);
-      updatePrimaryLanguage(db, repoId, language);
+      await updatePrimaryLanguage(repoId, language);
     } catch { /* non-critical */ }
 
     const branches = await provider.listBranches(owner, repo);
@@ -104,19 +103,18 @@ async function initialSync(
     }
 
     if (allCommits.length > 0) {
-      const inserted = insertCommitCache(db, allCommits);
+      const inserted = await insertCommitCache(allCommits);
       console.log(`[Repos] ${owner}/${repo}: cached ${inserted} commits via API`);
     }
 
-    updateSyncStatus(db, repoId, "ready");
+    await updateSyncStatus(repoId, "ready");
   } catch (err) {
     console.error(`[Repos] ${owner}/${repo}: initial sync failed -`, err);
-    updateSyncStatus(db, repoId, "error");
+    await updateSyncStatus(repoId, "error");
   }
 }
 
 async function registerSingleRepo(
-  db: ReturnType<typeof getDb>,
   userId: string,
   token: string,
   cloneUrl: string,
@@ -132,16 +130,15 @@ async function registerSingleRepo(
   }
 
   try {
-    const repoRow = db.transaction(() => {
-      insertRepositoryForUser(db, {
-        userId, owner: parsed.owner, repo: parsed.repo, branch, cloneUrl, credentialId,
-      });
-      return db.prepare(
-        "SELECT id FROM repositories WHERE user_id = ? AND clone_url = ?"
-      ).get(userId, cloneUrl) as any;
-    })();
+    await insertRepositoryForUser({
+      userId, owner: parsed.owner, repo: parsed.repo, branch, cloneUrl, credentialId,
+    });
 
-    initialSync(db, repoRow.id, parsed.owner, parsed.repo, branch, meta, token).catch(console.error);
+    const [repoRow] = await sql`
+      SELECT id FROM repositories WHERE user_id = ${userId} AND clone_url = ${cloneUrl}
+    `;
+
+    initialSync(repoRow.id, parsed.owner, parsed.repo, branch, meta, token).catch(console.error);
     return { success: true, cloneUrl };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -154,8 +151,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
 
-  const db = getDb();
-  const repos = getRepositoriesWithLastCommit(db, userId);
+  const repos = await getRepositoriesWithLastCommit(userId);
   return NextResponse.json(repos);
 }
 
@@ -165,18 +161,17 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const userId = session.user.id;
-  const db = getDb();
 
   const credentialId = body.credentialId ? Number(body.credentialId) : undefined;
 
   let gitCred: any;
   if (credentialId) {
-    gitCred = getCredentialById(db, credentialId);
+    gitCred = await getCredentialById(credentialId);
     if (!gitCred || gitCred.user_id !== userId) {
       return NextResponse.json({ error: "Credential not found" }, { status: 404 });
     }
   } else {
-    gitCred = getCredentialByUserAndProvider(db, userId, "git");
+    gitCred = await getCredentialByUserAndProvider(userId, "git");
   }
 
   if (!gitCred) {
@@ -188,7 +183,7 @@ export async function POST(request: NextRequest) {
   if (Array.isArray(body.repositories)) {
     const results = [];
     for (const item of body.repositories) {
-      const result = await registerSingleRepo(db, userId, token, item.cloneUrl, item.branch || "main", credentialId ?? gitCred.id, meta);
+      const result = await registerSingleRepo(userId, token, item.cloneUrl, item.branch || "main", credentialId ?? gitCred.id, meta);
       results.push(result);
     }
     const succeeded = results.filter(r => r.success).length;
@@ -204,7 +199,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "cloneUrl is required" }, { status: 400 });
   }
 
-  const result = await registerSingleRepo(db, userId, token, cloneUrl, branch, credentialId ?? gitCred.id, meta);
+  const result = await registerSingleRepo(userId, token, cloneUrl, branch, credentialId ?? gitCred.id, meta);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -227,30 +222,28 @@ export async function PATCH(request: NextRequest) {
 
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-  const db = getDb();
-
   if (autoReportEnabled !== undefined) {
-    const updated = updateAutoReportEnabled(db, id, userId, autoReportEnabled);
+    const updated = await updateAutoReportEnabled(id, userId, autoReportEnabled);
     if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
     return NextResponse.json({ message: "Updated" });
   }
 
   if (isActive !== undefined) {
-    const repo = getRepositoryByIdAndUser(db, id, userId);
+    const repo = await getRepositoryByIdAndUser(id, userId);
     if (!repo) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
-    db.prepare(
-      "UPDATE repositories SET is_active = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
-    ).run(isActive ? 1 : 0, id, userId);
+    await sql`
+      UPDATE repositories SET is_active = ${isActive}, updated_at = NOW() WHERE id = ${id} AND user_id = ${userId}
+    `;
     return NextResponse.json({ message: "Updated" });
   }
 
   if (label !== undefined) {
-    const updated = updateLabel(db, id, userId, label.trim() || null);
+    const updated = await updateLabel(id, userId, label.trim() || null);
     if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
     return NextResponse.json({ message: "Updated" });
   }
 
-  const updated = updateGitAuthor(db, id, userId, gitAuthor?.trim() || null);
+  const updated = await updateGitAuthor(id, userId, gitAuthor?.trim() || null);
   if (!updated) return NextResponse.json({ error: "Repository not found" }, { status: 404 });
   return NextResponse.json({ message: "Updated" });
 }
@@ -264,13 +257,12 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-  const db = getDb();
-  const repo = getRepositoryByIdAndUser(db, Number(id), userId);
+  const repo = await getRepositoryByIdAndUser(Number(id), userId);
   if (!repo) {
     return NextResponse.json({ error: "Repository not found" }, { status: 404 });
   }
 
-  const deleted = deleteRepositoryForUser(db, Number(id), userId);
+  const deleted = await deleteRepositoryForUser(Number(id), userId);
   if (!deleted) {
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
