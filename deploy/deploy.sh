@@ -35,9 +35,16 @@ echo "Database is ready"
 SQLITE_MOUNT=$(docker volume inspect --format '{{ .Mountpoint }}' briify_app-data 2>/dev/null || echo "")
 
 if [ -n "$SQLITE_MOUNT" ] && [ -f "$SQLITE_MOUNT/tracker.db" ]; then
-  # PostgreSQL에 이미 데이터가 있는지 확인 (테이블 없어도 안전)
-  PG_COUNT=$($DC exec -T db psql -U autobriify -d autobriify -t -c \
-    "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d '[:space:]' || echo "0")
+  # 테이블 존재 여부를 먼저 확인 (에러 로그 방지)
+  TABLE_EXISTS=$($DC exec -T db psql -U autobriify -d autobriify -t -c \
+    "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='users');" \
+    2>/dev/null | tr -d '[:space:]' || echo "f")
+
+  PG_COUNT="0"
+  if [ "$TABLE_EXISTS" = "t" ]; then
+    PG_COUNT=$($DC exec -T db psql -U autobriify -d autobriify -t -c \
+      "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d '[:space:]' || echo "0")
+  fi
 
   if [ "$PG_COUNT" = "0" ]; then
     echo ""
