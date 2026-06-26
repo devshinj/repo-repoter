@@ -17,7 +17,7 @@ export async function GET() {
     id: c.id,
     provider: c.provider,
     label: c.label,
-    metadata: c.metadata ? JSON.parse(c.metadata) : null,
+    metadata: c.metadata && typeof c.metadata === "string" ? JSON.parse(c.metadata) : c.metadata ?? null,
     maskedToken: maskToken(c.credential.split(":").pop() || "****"),
     createdAt: c.created_at,
     updatedAt: c.updated_at,

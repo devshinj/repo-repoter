@@ -74,7 +74,7 @@ export async function syncOneRepo(userId: string, repo: any): Promise<SyncResult
 
     const token = decrypt(gitCred.credential);
     const meta: GitProviderMeta = gitCred.metadata
-      ? JSON.parse(gitCred.metadata)
+      ? (typeof gitCred.metadata === "string" ? JSON.parse(gitCred.metadata) : gitCred.metadata)
       : inferProviderMeta(repo.clone_url);
 
     const provider = createGitProvider(meta, token);

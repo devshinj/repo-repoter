@@ -178,7 +178,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Git PAT이 등록되지 않았습니다. 설정에서 먼저 등록하세요." }, { status: 400 });
   }
   const token = decrypt(gitCred.credential);
-  const meta: GitProviderMeta = gitCred.metadata ? JSON.parse(gitCred.metadata) : inferProviderMeta();
+  const meta: GitProviderMeta = gitCred.metadata
+    ? (typeof gitCred.metadata === "string" ? JSON.parse(gitCred.metadata) : gitCred.metadata)
+    : inferProviderMeta();
 
   if (Array.isArray(body.repositories)) {
     const results = [];

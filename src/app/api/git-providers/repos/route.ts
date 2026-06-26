@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const meta: GitProviderMeta | null = cred.metadata ? JSON.parse(cred.metadata) : null;
+  const meta: GitProviderMeta | null = cred.metadata
+    ? (typeof cred.metadata === "string" ? JSON.parse(cred.metadata) : cred.metadata)
+    : null;
   if (!meta?.type) {
     return NextResponse.json({ error: "Credential has no provider metadata" }, { status: 400 });
   }

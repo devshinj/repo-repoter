@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const token = decrypt(gitCred.credential);
     const meta: GitProviderMeta = gitCred.metadata
-      ? JSON.parse(gitCred.metadata)
+      ? (typeof gitCred.metadata === "string" ? JSON.parse(gitCred.metadata) : gitCred.metadata)
       : inferProviderMeta(repo.clone_url);
 
     const provider = createGitProvider(meta, token);
