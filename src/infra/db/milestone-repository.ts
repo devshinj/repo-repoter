@@ -45,7 +45,7 @@ export async function getMilestonesByUser(userId: string): Promise<Milestone[]> 
     ORDER BY created_at DESC
   `;
 
-  return rows.map(mapMilestone);
+  return rows.map((r: any) => mapMilestone(r));
 }
 
 export async function getActiveMilestonesByScope(
@@ -87,7 +87,7 @@ export async function getActiveMilestonesByScope(
           ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC, created_at DESC
         `;
 
-  return rows.map(mapMilestone);
+  return rows.map((r: any) => mapMilestone(r));
 }
 
 export async function updateMilestone(
@@ -135,7 +135,7 @@ export async function getMilestoneById(id: number): Promise<Milestone | null> {
     WHERE id = ${id}
   `;
 
-  return row ? mapMilestone(row) : null;
+  return row ? mapMilestone(row as any) : null;
 }
 
 export async function deleteMilestone(id: number): Promise<void> {

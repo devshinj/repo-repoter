@@ -18,7 +18,7 @@
 - **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript (strict mode)
 - **UI:** Tailwind CSS + shadcn/ui
-- **Database:** SQLite (better-sqlite3) — 폴링 상태 추적용
+- **Database:** PostgreSQL 17 (postgres.js) — Docker Compose 구성
 - **Auth:** Auth.js v5 — HRMS OAuth2/OIDC Provider
 - **External APIs:** GitHub REST (@octokit/rest), Qwen LLM via vLLM (openai SDK)
 - **Scheduler:** node-cron — instrumentation.ts에서 초기화
@@ -108,6 +108,7 @@ src/
 ## Environment Variables
 
 ```
+DATABASE_URL          # PostgreSQL 연결 URL (예: postgresql://autobriify:devpass@localhost:5432/autobriify)
 GITHUB_TOKEN          # GitHub Personal Access Token
 QWEN_CODER_KEY        # Qwen LLM API Key
 QWEN_MODEL            # Qwen 모델명 (기본: qwen3-coder-next)
@@ -121,10 +122,11 @@ AUTH_URL              # NextAuth.js Base URL
 
 ## Deployment
 
-- 팀 내 서버에 Node.js 프로세스로 배포
-- `npm run build && npm start`
+- Docker Compose로 배포 (`docker compose up --build`)
+- PostgreSQL은 Docker Compose로 관리 (`docker compose up -d db`)
 - node-cron 스케줄러가 서버 프로세스 내에서 동작하므로 서버가 항상 실행 중이어야 함
-- SQLite DB 파일은 `data/tracker.db`에 저장됨 (gitignore 대상)
+- 환경변수 `DATABASE_URL` 필수
+- 기존 SQLite 데이터 이관: `npm run migrate:sqlite-to-pg`
 
 ## Git Workflow
 

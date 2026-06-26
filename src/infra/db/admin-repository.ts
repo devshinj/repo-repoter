@@ -49,11 +49,10 @@ export async function deleteUser(userId: number): Promise<void> {
   const userIdStr = String(userId);
 
   await sql.begin(async (tx) => {
-    const mappingIds = (
-      await tx<[{ id: number }][]>`
-        SELECT id FROM hrms_project_mappings WHERE user_id = ${userIdStr}
-      `
-    ).map((r) => r.id);
+    const mappingRows = await tx`
+      SELECT id FROM hrms_project_mappings WHERE user_id = ${userIdStr}
+    `;
+    const mappingIds = mappingRows.map((r: any) => r.id);
 
     for (const mid of mappingIds) {
       await tx`DELETE FROM hrms_task_logs WHERE mapping_id = ${mid}`;
@@ -61,11 +60,10 @@ export async function deleteUser(userId: number): Promise<void> {
     }
     await tx`DELETE FROM hrms_project_mappings WHERE user_id = ${userIdStr}`;
 
-    const lcMappingIds = (
-      await tx<[{ id: number }][]>`
-        SELECT id FROM hrms_logicraft_mappings WHERE user_id = ${userIdStr}
-      `
-    ).map((r) => r.id);
+    const lcMappingRows = await tx`
+      SELECT id FROM hrms_logicraft_mappings WHERE user_id = ${userIdStr}
+    `;
+    const lcMappingIds = lcMappingRows.map((r: any) => r.id);
 
     for (const mid of lcMappingIds) {
       await tx`DELETE FROM hrms_logicraft_task_logs WHERE mapping_id = ${mid}`;
