@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import Database from "better-sqlite3";
-import { createTables, migrateSchema } from "@/infra/db/schema";
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
+import { initDb, sql, closeSql } from "@/infra/db/connection";
 import {
   upsertHrmsApiKey,
   getHrmsApiKey,
@@ -15,23 +14,21 @@ import {
   hasSuccessLog,
 } from "@/infra/db/hrms";
 
-function createTestDb(): Database.Database {
-  const db = new Database(":memory:");
-  db.pragma("foreign_keys = ON");
-  createTables(db);
-  migrateSchema(db);
-  return db;
-}
+beforeAll(async () => {
+  await initDb();
+});
+
+afterEach(async () => {
+  await sql`DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE'; END LOOP; END $$`;
+});
+
+afterAll(async () => {
+  await closeSql();
+});
 
 describe("hrms_api_keys", () => {
-  let db: Database.Database;
-
-  beforeEach(() => {
-    db = createTestDb();
-  });
-
-  it("inserts and retrieves an API key", () => {
-    upsertHrmsApiKey(db, {
+  it("inserts and retrieves an API key", async () => {
+    await upsertHrmsApiKey({
       userId: "user1",
       encryptedKey: "enc_abc",
       hrmsUserId: "cqXKh7GRlDh-VAD7iPaQI",
@@ -39,21 +36,21 @@ describe("hrms_api_keys", () => {
       scopes: JSON.stringify({ resources: "all", permissions: ["read", "write", "create"] }),
     });
 
-    const row = getHrmsApiKey(db, "user1");
+    const row = await getHrmsApiKey("user1");
     expect(row).not.toBeNull();
     expect(row!.encrypted_key).toBe("enc_abc");
     expect(row!.hrms_user_name).toBe("신재석");
   });
 
-  it("upserts (updates on conflict)", () => {
-    upsertHrmsApiKey(db, {
+  it("upserts (updates on conflict)", async () => {
+    await upsertHrmsApiKey({
       userId: "user1",
       encryptedKey: "enc_old",
       hrmsUserId: "old-id",
       hrmsUserName: "old",
       scopes: "{}",
     });
-    upsertHrmsApiKey(db, {
+    await upsertHrmsApiKey({
       userId: "user1",
       encryptedKey: "enc_new",
       hrmsUserId: "new-id",
@@ -61,13 +58,13 @@ describe("hrms_api_keys", () => {
       scopes: "{}",
     });
 
-    const row = getHrmsApiKey(db, "user1");
+    const row = await getHrmsApiKey("user1");
     expect(row!.encrypted_key).toBe("enc_new");
     expect(row!.hrms_user_name).toBe("new");
   });
 
-  it("deletes an API key", () => {
-    upsertHrmsApiKey(db, {
+  it("deletes an API key", async () => {
+    await upsertHrmsApiKey({
       userId: "user1",
       encryptedKey: "enc_abc",
       hrmsUserId: "test-id",
@@ -75,95 +72,105 @@ describe("hrms_api_keys", () => {
       scopes: "{}",
     });
 
-    deleteHrmsApiKey(db, "user1");
-    expect(getHrmsApiKey(db, "user1")).toBeNull();
+    await deleteHrmsApiKey("user1");
+    expect(await getHrmsApiKey("user1")).toBeNull();
   });
 });
 
 describe("hrms_project_mappings", () => {
-  let db: Database.Database;
+  async function insertTestRepos() {
+    await sql`
+      INSERT INTO repositories (owner, repo, branch, user_id, clone_url)
+      VALUES ('org', 'frontend', 'main', 'user1', 'https://github.com/org/frontend')
+    `;
+    await sql`
+      INSERT INTO repositories (owner, repo, branch, user_id, clone_url)
+      VALUES ('org', 'backend', 'main', 'user1', 'https://github.com/org/backend')
+    `;
+  }
 
-  beforeEach(() => {
-    db = createTestDb();
-    db.prepare(
-      "INSERT INTO repositories (id, owner, repo, branch, user_id, clone_url) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(1, "org", "frontend", "main", "user1", "https://github.com/org/frontend");
-    db.prepare(
-      "INSERT INTO repositories (id, owner, repo, branch, user_id, clone_url) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(2, "org", "backend", "main", "user1", "https://github.com/org/backend");
-  });
+  it("creates a mapping with repos and retrieves it", async () => {
+    await insertTestRepos();
+    const repos = await sql`SELECT id FROM repositories ORDER BY id` as any[];
 
-  it("creates a mapping with repos and retrieves it", () => {
-    const id = insertMapping(db, {
+    const id = await insertMapping({
       userId: "user1",
       hrmsProjectId: 93,
       hrmsProjectName: "CUVIA",
       autoRegister: true,
       cronTime: "0 9 * * 1-5",
-      repositoryIds: [1, 2],
+      repositoryIds: repos.map((r: any) => r.id),
     });
 
-    const mappings = getMappingsByUser(db, "user1");
+    const mappings = await getMappingsByUser("user1");
     expect(mappings).toHaveLength(1);
     expect(mappings[0].hrms_project_name).toBe("CUVIA");
     expect(mappings[0].repos).toHaveLength(2);
   });
 
-  it("updates mapping repos", () => {
-    const id = insertMapping(db, {
+  it("updates mapping repos", async () => {
+    await insertTestRepos();
+    const repos = await sql`SELECT id FROM repositories ORDER BY id` as any[];
+
+    const id = await insertMapping({
       userId: "user1",
       hrmsProjectId: 93,
       hrmsProjectName: "CUVIA",
       autoRegister: false,
       cronTime: "0 9 * * 1-5",
-      repositoryIds: [1, 2],
+      repositoryIds: repos.map((r: any) => r.id),
     });
 
-    updateMapping(db, id, { repositoryIds: [1], autoRegister: true });
+    await updateMapping(id, { repositoryIds: [repos[0].id], autoRegister: true });
 
-    const m = getMappingById(db, id);
+    const m = await getMappingById(id);
     expect(m!.repos).toHaveLength(1);
-    expect(m!.auto_register).toBe(1);
+    expect(m!.auto_register).toBe(true);
   });
 
-  it("deletes mapping cascades to repos", () => {
-    const id = insertMapping(db, {
+  it("deletes mapping cascades to repos", async () => {
+    await insertTestRepos();
+    const repos = await sql`SELECT id FROM repositories ORDER BY id` as any[];
+
+    const id = await insertMapping({
       userId: "user1",
       hrmsProjectId: 93,
       hrmsProjectName: "CUVIA",
       autoRegister: false,
       cronTime: "0 9 * * 1-5",
-      repositoryIds: [1],
+      repositoryIds: [repos[0].id],
     });
 
-    deleteMapping(db, id);
-    expect(getMappingById(db, id)).toBeNull();
+    await deleteMapping(id);
+    expect(await getMappingById(id)).toBeNull();
   });
 });
 
 describe("hrms_task_logs", () => {
-  let db: Database.Database;
-
-  beforeEach(() => {
-    db = createTestDb();
-    db.prepare(
-      "INSERT INTO repositories (id, owner, repo, branch, user_id, clone_url) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(1, "org", "frontend", "main", "user1", "https://github.com/org/frontend");
-    insertMapping(db, {
+  async function setupMappingWithRepo(): Promise<number> {
+    await sql`
+      INSERT INTO repositories (owner, repo, branch, user_id, clone_url)
+      VALUES ('org', 'frontend', 'main', 'user1', 'https://github.com/org/frontend')
+    `;
+    const [repo] = await sql`SELECT id FROM repositories LIMIT 1` as any[];
+    const mappingId = await insertMapping({
       userId: "user1",
       hrmsProjectId: 93,
       hrmsProjectName: "CUVIA",
       autoRegister: false,
       cronTime: "0 9 * * 1-5",
-      repositoryIds: [1],
+      repositoryIds: [repo.id],
     });
-  });
+    return mappingId;
+  }
 
-  it("inserts log and checks duplicate", () => {
-    expect(hasSuccessLog(db, 1, "2026-06-10")).toBe(false);
+  it("inserts log and checks duplicate", async () => {
+    const mappingId = await setupMappingWithRepo();
 
-    insertTaskLog(db, {
-      mappingId: 1,
+    expect(await hasSuccessLog(mappingId, "2026-06-10")).toBe(false);
+
+    await insertTaskLog({
+      mappingId,
       hrmsTaskId: 8050,
       targetDate: "2026-06-10",
       title: "test",
@@ -172,12 +179,14 @@ describe("hrms_task_logs", () => {
       errorMessage: null,
     });
 
-    expect(hasSuccessLog(db, 1, "2026-06-10")).toBe(true);
+    expect(await hasSuccessLog(mappingId, "2026-06-10")).toBe(true);
   });
 
-  it("retrieves logs by user", () => {
-    insertTaskLog(db, {
-      mappingId: 1,
+  it("retrieves logs by user", async () => {
+    const mappingId = await setupMappingWithRepo();
+
+    await insertTaskLog({
+      mappingId,
       hrmsTaskId: 8050,
       targetDate: "2026-06-10",
       title: "test",
@@ -186,7 +195,7 @@ describe("hrms_task_logs", () => {
       errorMessage: null,
     });
 
-    const logs = getTaskLogs(db, "user1");
+    const logs = await getTaskLogs("user1");
     expect(logs).toHaveLength(1);
     expect(logs[0].hrms_project_name).toBe("CUVIA");
   });

@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
-import { createTables, migrateSchema } from "@/infra/db/schema";
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
+import { initDb, sql, closeSql } from "@/infra/db/connection";
 import {
   insertRepositoryForUser,
   getRepositoriesByUser,
@@ -11,27 +10,27 @@ import {
 } from "@/infra/db/repository";
 
 describe("user-scoped repository functions", () => {
-  let db: Database.Database;
-
-  beforeEach(() => {
-    db = new Database(":memory:");
-    createTables(db);
-    migrateSchema(db);
+  beforeAll(async () => {
+    await initDb();
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await sql`DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE'; END LOOP; END $$`;
   });
 
-  it("should insert and retrieve repos for a specific user", () => {
-    insertRepositoryForUser(db, {
+  afterAll(async () => {
+    await closeSql();
+  });
+
+  it("should insert and retrieve repos for a specific user", async () => {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "octocat",
       repo: "hello-world",
       branch: "main",
       cloneUrl: "https://github.com/octocat/hello-world.git",
     });
-    insertRepositoryForUser(db, {
+    await insertRepositoryForUser({
       userId: "user2",
       owner: "octocat",
       repo: "hello-world",
@@ -39,16 +38,16 @@ describe("user-scoped repository functions", () => {
       cloneUrl: "https://github.com/octocat/hello-world.git",
     });
 
-    const user1Repos = getRepositoriesByUser(db, "user1");
+    const user1Repos = await getRepositoriesByUser("user1");
     expect(user1Repos).toHaveLength(1);
     expect(user1Repos[0].owner).toBe("octocat");
 
-    const user2Repos = getRepositoriesByUser(db, "user2");
+    const user2Repos = await getRepositoriesByUser("user2");
     expect(user2Repos).toHaveLength(1);
   });
 
-  it("should get repo by id only if owned by user", () => {
-    insertRepositoryForUser(db, {
+  it("should get repo by id only if owned by user", async () => {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "octocat",
       repo: "repo1",
@@ -56,15 +55,15 @@ describe("user-scoped repository functions", () => {
       cloneUrl: "https://github.com/octocat/repo1.git",
     });
 
-    const repos = getRepositoriesByUser(db, "user1");
+    const repos = await getRepositoriesByUser("user1");
     const repoId = repos[0].id;
 
-    expect(getRepositoryByIdAndUser(db, repoId, "user1")).toBeDefined();
-    expect(getRepositoryByIdAndUser(db, repoId, "user2")).toBeUndefined();
+    expect(await getRepositoryByIdAndUser(repoId, "user1")).toBeDefined();
+    expect(await getRepositoryByIdAndUser(repoId, "user2")).toBeUndefined();
   });
 
-  it("should delete repo only if owned by user", () => {
-    insertRepositoryForUser(db, {
+  it("should delete repo only if owned by user", async () => {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "octocat",
       repo: "repo1",
@@ -72,28 +71,28 @@ describe("user-scoped repository functions", () => {
       cloneUrl: "https://github.com/octocat/repo1.git",
     });
 
-    const repos = getRepositoriesByUser(db, "user1");
+    const repos = await getRepositoriesByUser("user1");
     const repoId = repos[0].id;
 
-    const deleted = deleteRepositoryForUser(db, repoId, "user2");
+    const deleted = await deleteRepositoryForUser(repoId, "user2");
     expect(deleted).toBe(false);
 
-    const deleted2 = deleteRepositoryForUser(db, repoId, "user1");
+    const deleted2 = await deleteRepositoryForUser(repoId, "user1");
     expect(deleted2).toBe(true);
-    expect(getRepositoriesByUser(db, "user1")).toHaveLength(0);
+    expect(await getRepositoriesByUser("user1")).toHaveLength(0);
   });
 
-  it("should insert sync log with user_id", () => {
-    insertRepositoryForUser(db, {
+  it("should insert sync log with user_id", async () => {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "octocat",
       repo: "repo1",
       branch: "main",
       cloneUrl: "https://github.com/octocat/repo1.git",
     });
-    const repos = getRepositoriesByUser(db, "user1");
+    const repos = await getRepositoriesByUser("user1");
 
-    insertSyncLogForUser(db, {
+    await insertSyncLogForUser({
       repositoryId: repos[0].id,
       userId: "user1",
       status: "success",
@@ -102,27 +101,27 @@ describe("user-scoped repository functions", () => {
       errorMessage: null,
     });
 
-    const logs = db.prepare("SELECT * FROM sync_logs WHERE user_id = ?").all("user1") as any[];
+    const logs = await sql`SELECT * FROM sync_logs WHERE user_id = 'user1'` as any[];
     expect(logs).toHaveLength(1);
     expect(logs[0].commits_processed).toBe(5);
   });
 
-  it("should get active users with repos", () => {
-    insertRepositoryForUser(db, {
+  it("should get active users with repos", async () => {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "o",
       repo: "r1",
       branch: "main",
       cloneUrl: "https://github.com/o/r1.git",
     });
-    insertRepositoryForUser(db, {
+    await insertRepositoryForUser({
       userId: "user1",
       owner: "o",
       repo: "r2",
       branch: "main",
       cloneUrl: "https://github.com/o/r2.git",
     });
-    insertRepositoryForUser(db, {
+    await insertRepositoryForUser({
       userId: "user2",
       owner: "o",
       repo: "r3",
@@ -130,7 +129,7 @@ describe("user-scoped repository functions", () => {
       cloneUrl: "https://github.com/o/r3.git",
     });
 
-    const users = getActiveUsersWithRepos(db);
+    const users = await getActiveUsersWithRepos();
     expect(users).toHaveLength(2);
     expect(users).toContain("user1");
     expect(users).toContain("user2");
