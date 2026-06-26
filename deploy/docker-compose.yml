@@ -1,4 +1,21 @@
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: autobriify
+      POSTGRES_USER: autobriify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autobriify"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   app:
     image: autobriify:latest
     ports:
@@ -7,10 +24,12 @@ services:
       - "hrms.cudo.co.kr:192.168.102.2"
       - "logicraft.cudo.co.kr:192.168.102.2"
       - "open-llm.cudo.co.kr:192.168.102.107"
-    volumes:
-      - app-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      DATABASE_URL: postgresql://autobriify:${POSTGRES_PASSWORD}@db:5432/autobriify
       QWEN_CODER_KEY: ${QWEN_CODER_KEY}
       QWEN_MODEL: ${QWEN_MODEL}
       QWEN_API_URL: ${QWEN_API_URL}
@@ -28,4 +47,4 @@ services:
       retries: 3
 
 volumes:
-  app-data:
+  pgdata:

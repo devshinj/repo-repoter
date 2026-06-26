@@ -12,6 +12,12 @@ $FILES = @(
     "deploy/.env"
 )
 
+# migrator 이미지는 있을 때만 전송 (최초 배포 시 필요, 이후 생략 가능)
+if (Test-Path "deploy/autobriify-migrator.tar.gz") {
+    $FILES += "deploy/autobriify-migrator.tar.gz"
+    Write-Host "migrator image included (for SQLite migration)" -ForegroundColor Yellow
+}
+
 # Validate all files exist before starting transfer
 Write-Host "=== Checking files ===" -ForegroundColor Cyan
 foreach ($f in $FILES) {

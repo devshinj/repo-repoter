@@ -9,6 +9,7 @@
 | 배포 경로 | `/home/sjs/briify/` |
 | 서비스 포트 | `16000` (→ 컨테이너 내부 3000) |
 | basePath | `/briify` |
+| Database | PostgreSQL 17 (Docker Compose 내 `db` 서비스) |
 
 ## 배포 절차
 
@@ -19,7 +20,8 @@ powershell deploy/build.ps1
 ```
 
 - `autobriify:latest` — 앱 이미지
-- 출력: `deploy/autobriify.tar.gz`
+- `autobriify-migrator:latest` — SQLite→PostgreSQL 마이그레이션 이미지 (최초 배포용)
+- 출력: `deploy/autobriify.tar.gz`, `deploy/autobriify-migrator.tar.gz`
 
 ### 2. 전송 + 배포
 
@@ -29,7 +31,7 @@ powershell deploy/deploy-remote.ps1
 
 이미지, docker-compose.yml, deploy.sh, .env를 jump host 경유로 서버에 전송하고 deploy.sh를 실행합니다.
 
-> 전송 파일 목록: `autobriify.tar.gz`, `deploy.sh`, `docker-compose.yml`, `.env`
+> 전송 파일: `autobriify.tar.gz`, `autobriify-migrator.tar.gz` (있을 때만), `deploy.sh`, `docker-compose.yml`, `.env`
 
 ### 환경변수 (.env)
 
@@ -37,7 +39,7 @@ powershell deploy/deploy-remote.ps1
 
 ```powershell
 cp deploy/.env.example deploy/.env
-# deploy/.env 에서 비밀값 채우기
+# deploy/.env 에서 비밀값 채우기 (POSTGRES_PASSWORD 포함)
 ```
 
 > `deploy/.env`는 `.gitignore`에 포함되어 git에 커밋되지 않습니다.
@@ -46,11 +48,37 @@ cp deploy/.env.example deploy/.env
 
 1. `docker compose down` — 기존 컨테이너 중지
 2. `docker load` — tar.gz에서 이미지 로드
-3. 앱 컨테이너 기동
+3. PostgreSQL 컨테이너 기동 + healthy 대기
+4. 앱 컨테이너 기동 (initDb()로 테이블 자동 생성)
+5. **SQLite 마이그레이션 자동 감지** — 기존 `app-data` 볼륨에 SQLite 파일이 있고 PostgreSQL이 비어있으면 자동 이관
+6. 완료
 
-## SQLite 데이터 영속화
+## SQLite → PostgreSQL 마이그레이션
 
-SQLite DB 파일은 Docker named volume (`app-data`)에 저장됩니다.
+최초 PostgreSQL 배포 시 기존 SQLite 데이터를 자동으로 이관합니다.
+
+**자동 실행 조건:**
+- `briify_app-data` Docker volume에 `tracker.db` 파일이 존재
+- PostgreSQL `users` 테이블의 행 수가 0
+
+**수동 실행 (필요 시):**
+
+```bash
+# 서버에서 직접 실행
+cd /home/sjs/briify
+source .env
+SQLITE_MOUNT=$(docker volume inspect --format '{{ .Mountpoint }}' briify_app-data)
+docker run --rm \
+  --network=briify_default \
+  -v "$SQLITE_MOUNT:/sqlite-data:ro" \
+  -e DATABASE_URL="postgresql://autobriify:${POSTGRES_PASSWORD}@db:5432/autobriify" \
+  -e SQLITE_PATH="/sqlite-data/tracker.db" \
+  autobriify-migrator:latest
+```
+
+## PostgreSQL 데이터 영속화
+
+PostgreSQL 데이터는 Docker named volume (`pgdata`)에 저장됩니다.
 컨테이너를 재배포해도 데이터는 유지됩니다.
 
 > `docker compose down`은 volume을 삭제하지 않습니다. volume까지 삭제하려면 `docker compose down -v`를 사용하세요.
@@ -77,6 +105,12 @@ cd /home/sjs/briify && docker compose ps
 # 앱 로그
 docker compose logs -f app
 
-# SQLite 데이터 확인 (volume 위치)
-docker volume inspect briify_app-data
+# DB 로그
+docker compose logs -f db
+
+# PostgreSQL 직접 접속
+docker compose exec db psql -U autobriify -d autobriify
+
+# 마이그레이션 후 기존 SQLite volume 정리 (선택)
+docker volume rm briify_app-data
 ```

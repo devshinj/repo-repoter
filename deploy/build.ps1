@@ -1,11 +1,15 @@
-# deploy/build.ps1 - Build and export Docker image for deployment
+# deploy/build.ps1 - Build and export Docker images for deployment
 $ErrorActionPreference = "Stop"
 
 Write-Host "=== Building app image ===" -ForegroundColor Cyan
 docker build --platform linux/amd64 --target runner -t autobriify:latest -f deploy/Dockerfile .
 if ($LASTEXITCODE -ne 0) { throw "App build failed" }
 
-Write-Host "=== Saving image ===" -ForegroundColor Cyan
+Write-Host "=== Building migrator image ===" -ForegroundColor Cyan
+docker build --platform linux/amd64 --target migrator -t autobriify-migrator:latest -f deploy/Dockerfile .
+if ($LASTEXITCODE -ne 0) { throw "Migrator build failed" }
+
+Write-Host "=== Saving images ===" -ForegroundColor Cyan
 
 function Save-DockerImageGzip([string]$ImageName, [string]$OutputFile) {
     $tarFile = $OutputFile -replace '\.gz$', ''
@@ -21,6 +25,7 @@ function Save-DockerImageGzip([string]$ImageName, [string]$OutputFile) {
 }
 
 Save-DockerImageGzip "autobriify:latest" "deploy/autobriify.tar.gz"
+Save-DockerImageGzip "autobriify-migrator:latest" "deploy/autobriify-migrator.tar.gz"
 
 Write-Host "=== Done ===" -ForegroundColor Green
 Write-Host "Output:"

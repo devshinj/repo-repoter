@@ -1,29 +1,17 @@
-# -- Stage 1: Dependencies --
-FROM node:22-slim AS deps
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-
-# better-sqlite3 native 모듈 빌드용
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN npm ci
-
-# -- Stage 2: Build --
+# -- Stage 1: Build --
 FROM node:22-slim AS builder
 
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+RUN npm ci
+
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# -- Stage 3: Runtime --
+# -- Stage 2: Runtime --
 FROM node:22-slim AS runner
 
 WORKDIR /app
@@ -40,8 +28,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# SQLite 데이터 디렉토리
-RUN mkdir -p /app/data && chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app
 
 USER appuser
 
@@ -55,3 +42,20 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3000/briify || exit 1
 
 CMD ["node", "server.js"]
+
+# -- Stage 3: Migrator (SQLite → PostgreSQL 일회성 이관) --
+FROM node:22-slim AS migrator
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY scripts/migrate-sqlite-to-pg.ts ./scripts/
+COPY tsconfig.json ./
+
+CMD ["npx", "tsx", "scripts/migrate-sqlite-to-pg.ts"]
