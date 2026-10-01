@@ -10,11 +10,8 @@ import {
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
 import { createGitProvider, inferProviderMeta, type GitProviderClient } from "@/infra/git-provider";
-import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/llm/llm-client";
-import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
-import { isAmbiguousCommitMessage } from "@/core/analyzer/task-extractor";
 import { decrypt } from "@/infra/crypto/token-encryption";
-import type { CommitRecord, GitProviderMeta } from "@/core/types";
+import type { GitProviderMeta } from "@/core/types";
 
 let cronTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -28,7 +25,6 @@ export const maxCommitsPerBackfill = 5000;
 
 export interface SyncResult {
   commitsProcessed: number;
-  tasksCreated: number;
 }
 
 async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: number): Promise<PromiseSettledResult<R>[]> {
@@ -59,14 +55,13 @@ export async function fetchUncachedCommits(
   provider: GitProviderClient,
   repo: { id: number; owner: string; repo: string; branch: string },
   options: FetchCommitsOptions,
-): Promise<{ cacheCommits: CacheCommit[]; commitRecords: CommitRecord[] }> {
+): Promise<{ cacheCommits: CacheCommit[] }> {
   const branches = await provider.listBranches(repo.owner, repo.repo);
   const branchNames = branches.map(b => b.name);
   const targetBranches = branchNames.length > 0 ? branchNames : [repo.branch];
 
   const seenShas = new Set<string>();
   const cacheCommits: CacheCommit[] = [];
-  const commitRecords: CommitRecord[] = [];
 
   for (const br of targetBranches) {
     let page = 1;
@@ -103,17 +98,12 @@ export async function fetchUncachedCommits(
           committedDate: isoToKstDate(c.date), committedAt: c.date,
           additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
         });
-        commitRecords.push({
-          sha: c.sha, message: c.message, author: c.author, date: c.date,
-          repoOwner: repo.owner, repoName: repo.repo, branch: br,
-          filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
-        });
       }
       page++;
     }
   }
 
-  return { cacheCommits, commitRecords };
+  return { cacheCommits };
 }
 
 async function createProviderForRepo(userId: string, repo: any): Promise<GitProviderClient> {
@@ -213,59 +203,20 @@ export async function syncOneRepo(userId: string, repo: any): Promise<SyncResult
       : (() => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); })();
 
     // 전체 브랜치 동기화 (stats inline + 캐시 체크로 API 부하 최소화)
-    const { cacheCommits: newCacheCommits, commitRecords: newCommitRecords } = await fetchUncachedCommits(
+    const { cacheCommits: newCacheCommits } = await fetchUncachedCommits(
       provider, repo, { since: sinceDate, maxCommits: maxCommitsPerSync },
     );
 
-    // Cache
-    if (newCacheCommits.length > 0) {
-      const inserted = await insertCommitCache(newCacheCommits);
-      if (inserted > 0) console.log(`[Sync] ${repo.owner}/${repo.repo}: cached ${inserted} new commits`);
-    }
-
-    if (newCommitRecords.length === 0) {
-      console.log(`[Sync] ${repo.owner}/${repo.repo}: no new commits`);
-      await insertSyncLogForUser({
-        repositoryId: repo.id, userId, status: "success",
-        commitsProcessed: 0, tasksCreated: 0, errorMessage: null,
-      });
-      await updateSyncStatus(repo.id, "ready");
-      return { commitsProcessed: 0, tasksCreated: 0 };
-    }
-
-    console.log(`[Sync] ${repo.owner}/${repo.repo}: found ${newCommitRecords.length} new commits`);
-
-    // Enrich ambiguous commits
-    const enrichedCommits: CommitRecord[] = [];
-    for (const commit of newCommitRecords) {
-      if (isAmbiguousCommitMessage(commit.message)) {
-        try {
-          const diff = await provider.getCommitDiff(repo.owner, repo.repo, commit.sha);
-          const summary = await analyzeCommitWithDiff(commit, diff);
-          enrichedCommits.push({ ...commit, message: summary });
-        } catch { enrichedCommits.push(commit); }
-      } else {
-        enrichedCommits.push(commit);
-      }
-    }
-
-    // Group + analyze
-    const groups = groupCommitsByDateAndProject(enrichedCommits);
-    let tasksCreated = 0;
-    for (const group of groups) {
-      const tasks = await analyzeCommits(group.commits, group.project, group.date);
-      tasksCreated += tasks.length;
-    }
-
-    await updateLastSyncedSha(repo.id, newCommitRecords[0].sha);
+    const inserted = await insertCommitCache(newCacheCommits);
+    if (newCacheCommits.length > 0) await updateLastSyncedSha(repo.id, newCacheCommits[0].sha);
     await insertSyncLogForUser({
       repositoryId: repo.id, userId, status: "success",
-      commitsProcessed: newCommitRecords.length, tasksCreated, errorMessage: null,
+      commitsProcessed: inserted, tasksCreated: 0, errorMessage: null,
     });
-    console.log(`[Sync] ${repo.owner}/${repo.repo}: synced ${newCommitRecords.length} commits, created ${tasksCreated} tasks`);
+    console.log(`[Sync] ${repo.owner}/${repo.repo}: ${inserted > 0 ? `cached ${inserted} new commits` : "no new commits"}`);
 
     await updateSyncStatus(repo.id, "ready");
-    return { commitsProcessed: newCommitRecords.length, tasksCreated };
+    return { commitsProcessed: inserted };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     await insertSyncLogForUser({

@@ -308,7 +308,7 @@ export default function ReposPage() {
       const res = await fetch(api(`/repos/${id}/sync`), { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`동기화 완료: ${data.commitsProcessed}개 커밋, ${data.tasksCreated}개 태스크`);
+        toast.success(`동기화 완료: ${data.commitsProcessed}개 커밋`);
         fetchRepos();
       } else {
         toast.error(data.error || "동기화 실패");

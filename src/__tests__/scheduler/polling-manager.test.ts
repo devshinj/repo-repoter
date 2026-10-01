@@ -7,7 +7,6 @@ vi.mock("@/infra/db/repository", () => ({
   getCachedShas: vi.fn(async (_repoId: number, shas: string[]) => new Set(shas.filter((s) => cachedShas.has(s)))),
 }));
 vi.mock("@/infra/db/credential", () => ({}));
-vi.mock("@/infra/llm/llm-client", () => ({}));
 vi.mock("@/infra/crypto/token-encryption", () => ({}));
 
 const { fetchUncachedCommits } = await import("@/scheduler/polling-manager");

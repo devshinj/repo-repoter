@@ -21,7 +21,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({
       message: result.commitsProcessed === 0 ? "No new commits" : "Sync complete",
       commitsProcessed: result.commitsProcessed,
-      tasksCreated: result.tasksCreated,
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
