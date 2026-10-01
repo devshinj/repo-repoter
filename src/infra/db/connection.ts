@@ -22,6 +22,26 @@ export async function closeSql(): Promise<void> {
   await sql.end();
 }
 
+/**
+ * DB 연결이 가능해질 때까지 재시도.
+ * 서버 재부팅 시 Docker가 restart 정책으로 컨테이너를 순서 없이 띄우므로(depends_on 미적용)
+ * 앱이 DB보다 먼저 뜰 수 있다.
+ */
+export async function waitForDb(retryIntervalMs: number = 5000): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sql`SELECT 1`;
+      if (attempt > 1) console.log(`[DB] 연결 성공 (시도 ${attempt}회)`);
+      return;
+    } catch (err) {
+      const e = err as { code?: string; message?: string; errors?: { code?: string }[] };
+      const reason = e.code ?? e.errors?.[0]?.code ?? (e.message || String(err));
+      console.warn(`[DB] 연결 대기 중 (시도 ${attempt}회): ${reason}`);
+      await new Promise((resolve) => setTimeout(resolve, retryIntervalMs));
+    }
+  }
+}
+
 export async function initDb(): Promise<void> {
   await createTables();
 }
