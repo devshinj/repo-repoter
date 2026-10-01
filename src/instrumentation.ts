@@ -1,4 +1,4 @@
-// instrumentation.ts (프로젝트 루트)
+// src/instrumentation.ts — src/app 구조에서는 반드시 src/ 아래에 있어야 빌드에 포함된다
 export async function register() {
   // 서버 사이드에서만 스케줄러 실행
   if (process.env.NEXT_RUNTIME === "nodejs") {

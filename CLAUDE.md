@@ -21,7 +21,7 @@
 - **Database:** PostgreSQL 17 (postgres.js) — Docker Compose 구성
 - **Auth:** Auth.js v5 — HRMS OAuth2/OIDC Provider
 - **External APIs:** GitHub REST (@octokit/rest), Qwen LLM via vLLM (openai SDK)
-- **Scheduler:** node-cron — instrumentation.ts에서 초기화
+- **Scheduler:** node-cron — src/instrumentation.ts에서 초기화 (루트에 두면 프로덕션 빌드에서 누락됨)
 - **Testing:** Vitest
 
 ## Architecture Rules

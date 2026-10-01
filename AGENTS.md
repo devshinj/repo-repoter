@@ -17,7 +17,7 @@ Next.js 16 App Router 모놀리스. 4개 레이어:
 
 ## Key Entry Points
 
-- `instrumentation.ts` — 서버 시작 시 스케줄러 초기화
+- `src/instrumentation.ts` — 서버 시작 시 스케줄러 초기화 (src/app 구조라 반드시 src/ 아래에 위치해야 빌드에 포함됨)
 - `src/lib/auth.ts` — HRMS OIDC 인증 설정
 - `src/scheduler/polling-manager.ts` — 폴링 파이프라인 오케스트레이션
 
