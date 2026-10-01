@@ -15,7 +15,7 @@ import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent } from "@/infra/llm/llm-client";
 import { estimateWorkMinutes } from "@/core/analyzer/time-estimator";
 import type { CommitRecord } from "@/core/types";
-import { syncOneRepo } from "@/scheduler/polling-manager";
+import { syncOneRepo, backfillReposForDate } from "@/scheduler/polling-manager";
 import { createJob, emitJobEvent } from "@/infra/hrms/registration-jobs";
 import { getKstYesterday } from "@/core/date-utils";
 
@@ -86,6 +86,10 @@ async function executeRegistration(
       await updateTaskLog(logId, { status: "error", errorMessage: `All repos sync failed: ${failedRepos.join(", ")}` });
       return;
     }
+
+    // ── 1-2단계: 지정일 구간 재조회 (증분 동기화로 빠진 과거 커밋 보충) ──
+    emitJobEvent(logId, { step: "syncing", message: `${date} 커밋 재조회 중...` });
+    await backfillReposForDate(userId, mapping.repos, date);
 
     // ── 2단계: 커밋 수집 (저장소별 git_author 필터 적용) ──
     const repoIds = mapping.repos.map((r: any) => r.id);

@@ -17,7 +17,7 @@ import {
 } from "@/infra/db/logicraft";
 import { getCommitsByDateRange, getRepoLastSyncAt } from "@/infra/db/repository";
 import { sql } from "@/infra/db/connection";
-import { syncOneRepo } from "@/scheduler/polling-manager";
+import { syncOneRepo, backfillReposForDate } from "@/scheduler/polling-manager";
 import { decrypt } from "@/infra/crypto/token-encryption";
 import { createTask, updateTask, listTasks } from "@/infra/hrms/hrms-client";
 import { generateHrmsTaskContent, generateLogicraftTaskContent } from "@/infra/llm/llm-client";
@@ -105,6 +105,9 @@ async function executeRegistration(mappingId: number): Promise<void> {
   if (failedRepos.length > 0) {
     console.warn(`[HrmsScheduler] mapping=${mappingId}: ${failedRepos.length} repo(s) failed, continuing with remaining`);
   }
+
+  // 대상일 구간 재조회 (증분 동기화로 빠진 커밋 보충)
+  await backfillReposForDate(mapping.user_id, mapping.repos, date);
 
   const repoIds = mapping.repos.map((r: any) => r.id);
   const allAuthors: string[] = [];

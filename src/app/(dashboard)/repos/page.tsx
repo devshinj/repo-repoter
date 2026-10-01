@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/data-display/empty-state";
 import { toast } from "sonner";
-import { GitBranch, GitCommit, Trash2, RefreshCw, ChevronRight, User, Plus, X, Loader2, Search, Pencil, Check, NotebookPen } from "lucide-react";
+import { GitBranch, GitCommit, Trash2, RefreshCw, ChevronRight, User, Plus, X, Loader2, Search, Pencil, Check, NotebookPen, History } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -318,6 +318,26 @@ export default function ReposPage() {
     }
   };
 
+  const [resyncTarget, setResyncTarget] = useState<number | null>(null);
+
+  const handleResyncClick = (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResyncTarget(id);
+  };
+
+  const handleResyncConfirm = async () => {
+    if (resyncTarget === null) return;
+    const res = await fetch(api(`/repos/${resyncTarget}/resync`), { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      toast.success("전체 재동기화를 시작했습니다. 완료까지 몇 분 걸릴 수 있습니다.");
+      fetchRepos();
+    } else {
+      toast.error(data.error || "전체 재동기화 실패");
+    }
+  };
+
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [toggleTarget, setToggleTarget] = useState<{ id: number; nextActive: boolean } | null>(null);
 
@@ -552,6 +572,16 @@ export default function ReposPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={(e) => handleResyncClick(e, repo.id)}
+                      disabled={syncing === repo.id || (repo.sync_status !== "ready" && repo.sync_status !== "error")}
+                      title="전체 재동기화 (최근 6개월)"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                       onClick={(e) => handleDeleteClick(e, repo.id)}
                       title="삭제"
@@ -703,6 +733,16 @@ export default function ReposPage() {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={resyncTarget !== null}
+        onOpenChange={(open) => { if (!open) setResyncTarget(null); }}
+        title="전체 재동기화"
+        description="최근 6개월 커밋을 처음부터 다시 조회해 누락된 커밋을 채웁니다. 이미 저장된 커밋은 유지되며, 저장소 규모에 따라 몇 분 걸릴 수 있습니다."
+        confirmLabel="재동기화"
+        variant="default"
+        onConfirm={handleResyncConfirm}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
