@@ -78,6 +78,7 @@ export class GiteaProvider implements GitProviderClient {
     const params = new URLSearchParams();
     if (options?.branch) params.set("sha", options.branch);
     if (options?.since) params.set("since", options.since);
+    if (options?.until) params.set("until", options.until);
     params.set("limit", String(options?.perPage ?? 50));
     if (options?.page) params.set("page", String(options.page));
     params.set("stat", "true");

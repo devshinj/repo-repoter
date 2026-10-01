@@ -20,6 +20,7 @@ export interface ApiBranch {
 export interface ListCommitsOptions {
   branch?: string;
   since?: string;   // ISO 8601
+  until?: string;   // ISO 8601
   author?: string;
   perPage?: number;
   page?: number;

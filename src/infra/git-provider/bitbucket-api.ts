@@ -79,7 +79,10 @@ export class BitbucketProvider implements GitProviderClient {
     if (options?.branch) params.set("include", options.branch);
     params.set("pagelen", String(options?.perPage ?? 30));
     if (options?.page) params.set("page", String(options.page));
-    if (options?.since) params.set("q", `date > ${options.since.slice(0, 10)}`);
+    const filters: string[] = [];
+    if (options?.since) filters.push(`date > ${options.since.slice(0, 10)}`);
+    if (options?.until) filters.push(`date < ${options.until.slice(0, 10)}`);
+    if (filters.length > 0) params.set("q", filters.join(" AND "));
     const res = await fetch(`${this.apiBase}/repositories/${owner}/${repo}/commits?${params}`, { headers: this.headers });
     if (!res.ok) throw new Error(`Bitbucket API error: ${res.status}`);
     const data = await res.json();

@@ -90,6 +90,7 @@ export class GitHubProvider implements GitProviderClient {
     const params: any = { owner, repo, per_page: options?.perPage ?? 100 };
     if (options?.branch) params.sha = options.branch;
     if (options?.since) params.since = options.since;
+    if (options?.until) params.until = options.until;
     if (options?.author) params.author = options.author;
     if (options?.page) params.page = options.page;
 

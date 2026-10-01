@@ -12,7 +12,6 @@ import {
   updateAutoReportEnabled,
   insertCommitCache,
   trySyncStart,
-  type CacheCommit,
 } from "@/infra/db/repository";
 import { sql } from "@/infra/db/connection";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
@@ -21,20 +20,7 @@ import { parseGitUrl } from "@/infra/git/parse-git-url";
 import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
 import type { GitProviderMeta } from "@/core/types";
 import { auth } from "@/lib/auth";
-
-const detailConcurrency = 5;
-
-async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: number): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency);
-    const settled = await Promise.allSettled(batch.map(fn));
-    for (const r of settled) {
-      if (r.status === "fulfilled") results.push(r.value);
-    }
-  }
-  return results;
-}
+import { fetchUncachedCommits, maxCommitsPerBackfill } from "@/scheduler/polling-manager";
 
 async function initialSync(
   repoId: number,
@@ -56,51 +42,13 @@ async function initialSync(
       await updatePrimaryLanguage(repoId, language);
     } catch { /* non-critical */ }
 
-    const branches = await provider.listBranches(owner, repo);
-    const branchNames = branches.map(b => b.name);
-    const targetBranches = branchNames.length > 0 ? branchNames : [branch];
-
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const sinceDate = sixMonthsAgo.toISOString();
 
-    const seenShas = new Set<string>();
-    const allCommits: CacheCommit[] = [];
-
-    const maxCommits = 1000;
-    for (const br of targetBranches) {
-      let page = 1;
-      while (true) {
-        if (seenShas.size >= maxCommits) break;
-
-        const commits = await provider.listCommits(owner, repo, {
-          branch: br, since: sinceDate, perPage: 100, page,
-        });
-        if (commits.length === 0) break;
-
-        const newCommits = commits.filter(c => !seenShas.has(c.sha));
-        const needsDetail = newCommits.filter(c => !c.statsLoaded);
-        const alreadyDetailed = newCommits.filter(c => c.statsLoaded);
-        const fetched = await pMap(
-          needsDetail,
-          (c) => provider.getCommitDetail(owner, repo, c.sha),
-          detailConcurrency
-        );
-        const detailed = [...alreadyDetailed, ...fetched];
-
-        for (const c of detailed) {
-          seenShas.add(c.sha);
-          allCommits.push({
-            sha: c.sha, repositoryId: repoId, branch: br,
-            author: c.author, message: c.message,
-            committedDate: c.date.slice(0, 10), committedAt: c.date,
-            additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
-          });
-        }
-        if (commits.length < 100) break;
-        page++;
-      }
-    }
+    const { cacheCommits: allCommits } = await fetchUncachedCommits(
+      provider, { id: repoId, owner, repo, branch },
+      { since: sixMonthsAgo.toISOString(), maxCommits: maxCommitsPerBackfill },
+    );
 
     if (allCommits.length > 0) {
       const inserted = await insertCommitCache(allCommits);

@@ -30,5 +30,19 @@ export function toKstDateString(date: Date): string {
   return date.toLocaleDateString("en-CA", { timeZone: kstTimeZone });
 }
 
+/** ISO 8601 타임스탬프를 KST 날짜 문자열 (YYYY-MM-DD)로 변환. 파싱 불가 시 앞 10자리 폴백 */
+export function isoToKstDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.slice(0, 10);
+  return toKstDateString(d);
+}
+
+/** KST 날짜(YYYY-MM-DD)의 자정(+offset일)을 UTC ISO 문자열로 반환 — API since/until 파라미터용 */
+export function kstDayStartIso(kstDate: string, offsetDays: number = 0): string {
+  const d = new Date(`${kstDate}T00:00:00+09:00`);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString();
+}
+
 /** node-cron schedule 옵션에 전달할 timezone 설정 */
 export const kstCronOptions = { timezone: kstTimeZone } as const;

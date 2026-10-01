@@ -323,6 +323,19 @@ async function createTables(): Promise<void> {
   await sql`ALTER TABLE hrms_project_mappings ALTER COLUMN cron_time SET DEFAULT '0 9 * * *'`;
   await sql`ALTER TABLE hrms_logicraft_mappings ALTER COLUMN cron_time SET DEFAULT '0 9 * * *'`;
 
+  // Migration: committed_date를 UTC 기준 → KST 기준으로 보정 (원본 타임스탬프 committed_at으로 재계산, 멱등)
+  try {
+    const result = await sql`
+      UPDATE commit_cache
+      SET committed_date = to_char(committed_at::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
+      WHERE committed_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+        AND committed_date <> to_char(committed_at::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
+    `;
+    if (result.count > 0) console.log(`[DB] commit_cache committed_date KST 보정: ${result.count}건`);
+  } catch (err) {
+    console.error("[DB] commit_cache committed_date KST 보정 실패:", err instanceof Error ? err.message : err);
+  }
+
   // Migration: feed_entries scope_type에 'logicraft' 추가
   const [constraint] = await sql`
     SELECT conname FROM pg_constraint

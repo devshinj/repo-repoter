@@ -1,6 +1,6 @@
 // src/scheduler/polling-manager.ts
 import cron, { type ScheduledTask } from "node-cron";
-import { kstCronOptions } from "@/core/date-utils";
+import { kstCronOptions, isoToKstDate, kstDayStartIso } from "@/core/date-utils";
 import {
   getActiveUsersWithRepos, getRepositoriesByUser,
   updateLastSyncedSha, insertSyncLogForUser,
@@ -9,7 +9,7 @@ import {
   type CacheCommit,
 } from "@/infra/db/repository";
 import { getCredentialByUserAndProvider, getCredentialById } from "@/infra/db/credential";
-import { createGitProvider, inferProviderMeta } from "@/infra/git-provider";
+import { createGitProvider, inferProviderMeta, type GitProviderClient } from "@/infra/git-provider";
 import { analyzeCommits, analyzeCommitWithDiff } from "@/infra/llm/llm-client";
 import { groupCommitsByDateAndProject } from "@/core/analyzer/commit-grouper";
 import { isAmbiguousCommitMessage } from "@/core/analyzer/task-extractor";
@@ -24,6 +24,7 @@ let syncStartedAt: string | null = null;
 const repoSyncConcurrency = 3;
 const detailConcurrency = 5;
 const maxCommitsPerSync = 1000;
+export const maxCommitsPerBackfill = 5000;
 
 export interface SyncResult {
   commitsProcessed: number;
@@ -40,20 +41,150 @@ async function pMap<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: 
   return results;
 }
 
-async function pMapFulfilled<T, R>(items: T[], fn: (item: T) => Promise<R>, concurrency: number): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency);
-    const settled = await Promise.allSettled(batch.map(fn));
-    for (const r of settled) {
-      if (r.status === "fulfilled") results.push(r.value);
-    }
-  }
-  return results;
-}
-
 export function getSchedulerStatus() {
   return { isRunning, lastRunAt, syncStartedAt, scheduled: cronTask !== null, intervalMin: 15 };
+}
+
+export interface FetchCommitsOptions {
+  since: string;
+  until?: string;
+  maxCommits: number;
+}
+
+/**
+ * 전체 브랜치의 커밋을 마지막 페이지까지 조회해 캐시에 없는 커밋만 반환.
+ * 서버별 페이지 크기 상한(Gitea 기본 50건)이 달라 "빈 페이지"가 나올 때까지 읽는다.
+ */
+export async function fetchUncachedCommits(
+  provider: GitProviderClient,
+  repo: { id: number; owner: string; repo: string; branch: string },
+  options: FetchCommitsOptions,
+): Promise<{ cacheCommits: CacheCommit[]; commitRecords: CommitRecord[] }> {
+  const branches = await provider.listBranches(repo.owner, repo.repo);
+  const branchNames = branches.map(b => b.name);
+  const targetBranches = branchNames.length > 0 ? branchNames : [repo.branch];
+
+  const seenShas = new Set<string>();
+  const cacheCommits: CacheCommit[] = [];
+  const commitRecords: CommitRecord[] = [];
+
+  for (const br of targetBranches) {
+    let page = 1;
+    while (seenShas.size < options.maxCommits) {
+      const commits = await provider.listCommits(repo.owner, repo.repo, {
+        branch: br, since: options.since, until: options.until, perPage: 100, page,
+      });
+      if (commits.length === 0) break;
+
+      const newCommits = commits.filter(c => !seenShas.has(c.sha));
+      // 다른 브랜치에서 이미 본 이력만 남았으면 이 브랜치는 종료
+      if (newCommits.length === 0) break;
+      for (const c of newCommits) seenShas.add(c.sha);
+
+      // 이미 캐시된 SHA는 스킵
+      const cached = await getCachedShas(repo.id, newCommits.map(c => c.sha));
+      const uncachedCommits = newCommits.filter(c => !cached.has(c.sha));
+
+      // listCommits에서 stats를 이미 가져온 커밋은 detail 호출 스킵.
+      // detail 조회 실패 시 커밋을 버리지 않고 목록 정보로 저장 (증분 동기화 특성상 버리면 영구 누락)
+      const needsDetail = uncachedCommits.filter(c => !c.statsLoaded);
+      const alreadyDetailed = uncachedCommits.filter(c => c.statsLoaded);
+      const settled = await pMap(
+        needsDetail,
+        (c) => provider.getCommitDetail(repo.owner, repo.repo, c.sha),
+        detailConcurrency
+      );
+      const fetched = settled.map((r, i) => r.status === "fulfilled" ? r.value : needsDetail[i]);
+
+      for (const c of [...alreadyDetailed, ...fetched]) {
+        cacheCommits.push({
+          sha: c.sha, repositoryId: repo.id, branch: br,
+          author: c.author, message: c.message,
+          committedDate: isoToKstDate(c.date), committedAt: c.date,
+          additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
+        });
+        commitRecords.push({
+          sha: c.sha, message: c.message, author: c.author, date: c.date,
+          repoOwner: repo.owner, repoName: repo.repo, branch: br,
+          filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
+        });
+      }
+      page++;
+    }
+  }
+
+  return { cacheCommits, commitRecords };
+}
+
+async function createProviderForRepo(userId: string, repo: any): Promise<GitProviderClient> {
+  const gitCred = repo.credential_id
+    ? await getCredentialById(repo.credential_id)
+    : await getCredentialByUserAndProvider(userId, "git");
+  if (!gitCred) throw new Error("Git credential not found for sync");
+
+  const token = decrypt(gitCred.credential);
+  const meta: GitProviderMeta = gitCred.metadata
+    ? (typeof gitCred.metadata === "string" ? JSON.parse(gitCred.metadata) : gitCred.metadata)
+    : inferProviderMeta(repo.clone_url);
+
+  return createGitProvider(meta, token);
+}
+
+/**
+ * 지정 기간의 커밋을 다시 조회해 캐시 구멍을 메운다 (LLM 분석 없음).
+ * 이미 동기화 중이면 null 반환. 반환값은 새로 캐시된 커밋 수.
+ */
+export async function backfillRepoCommits(
+  userId: string,
+  repo: any,
+  range: { since: string; until?: string },
+): Promise<number | null> {
+  if (!await trySyncStart(repo.id)) {
+    console.log(`[Backfill] ${repo.owner}/${repo.repo}: already syncing, skipped`);
+    return null;
+  }
+
+  try {
+    const provider = await createProviderForRepo(userId, repo);
+    const { cacheCommits } = await fetchUncachedCommits(provider, repo, {
+      since: range.since, until: range.until, maxCommits: maxCommitsPerBackfill,
+    });
+    const inserted = await insertCommitCache(cacheCommits);
+    await insertSyncLogForUser({
+      repositoryId: repo.id, userId, status: "success",
+      commitsProcessed: inserted, tasksCreated: 0, errorMessage: null,
+    });
+    await updateSyncStatus(repo.id, "ready");
+    console.log(`[Backfill] ${repo.owner}/${repo.repo}: cached ${inserted} commits (since ${range.since}${range.until ? `, until ${range.until}` : ""})`);
+    return inserted;
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await insertSyncLogForUser({
+      repositoryId: repo.id, userId, status: "error",
+      commitsProcessed: 0, tasksCreated: 0, errorMessage: `[Backfill] ${errorMsg}`,
+    });
+    await updateSyncStatus(repo.id, "error");
+    console.error(`[Backfill] ${repo.owner}/${repo.repo}: failed -`, errorMsg);
+    throw err;
+  }
+}
+
+/**
+ * 특정 KST 날짜 전후(전날~이틀 뒤) 구간을 재조회해 해당 날짜의 캐시 누락분을 채운다.
+ * 저장소별 실패는 건너뛴다(sync_logs에 기록됨). 반환값은 새로 캐시된 커밋 수.
+ */
+export async function backfillReposForDate(userId: string, repos: any[], kstDate: string): Promise<number> {
+  let total = 0;
+  for (const repo of repos) {
+    try {
+      const inserted = await backfillRepoCommits(userId, repo, {
+        since: kstDayStartIso(kstDate, -1),
+        until: kstDayStartIso(kstDate, 2),
+      });
+      total += inserted ?? 0;
+    } catch { /* backfillRepoCommits가 sync_logs에 에러 기록 */ }
+  }
+  return total;
 }
 
 /**
@@ -67,17 +198,7 @@ export async function syncOneRepo(userId: string, repo: any): Promise<SyncResult
   }
 
   try {
-    const gitCred = repo.credential_id
-      ? await getCredentialById(repo.credential_id)
-      : await getCredentialByUserAndProvider(userId, "git");
-    if (!gitCred) throw new Error("Git credential not found for sync");
-
-    const token = decrypt(gitCred.credential);
-    const meta: GitProviderMeta = gitCred.metadata
-      ? (typeof gitCred.metadata === "string" ? JSON.parse(gitCred.metadata) : gitCred.metadata)
-      : inferProviderMeta(repo.clone_url);
-
-    const provider = createGitProvider(meta, token);
+    const provider = await createProviderForRepo(userId, repo);
 
     // Language
     try {
@@ -88,65 +209,13 @@ export async function syncOneRepo(userId: string, repo: any): Promise<SyncResult
     // Incremental sync
     const latestDate = await getLatestCacheDate(repo.id);
     const sinceDate = latestDate
-      ? new Date(new Date(latestDate).getTime() - 86400000).toISOString()
+      ? kstDayStartIso(latestDate, -1)
       : (() => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); })();
 
     // 전체 브랜치 동기화 (stats inline + 캐시 체크로 API 부하 최소화)
-    const branches = await provider.listBranches(repo.owner, repo.repo);
-    const branchNames = branches.map(b => b.name);
-    const targetBranches = branchNames.length > 0 ? branchNames : [repo.branch];
-
-    const seenShas = new Set<string>();
-    const newCacheCommits: CacheCommit[] = [];
-    const newCommitRecords: CommitRecord[] = [];
-
-    for (const br of targetBranches) {
-      let page = 1;
-      while (true) {
-        if (seenShas.size >= maxCommitsPerSync) break;
-
-        const commits = await provider.listCommits(repo.owner, repo.repo, {
-          branch: br, since: sinceDate, perPage: 100, page,
-        });
-        if (commits.length === 0) break;
-
-        const newCommits = commits.filter(c => !seenShas.has(c.sha));
-        // 이미 캐시된 SHA는 스킵
-        const cached = await getCachedShas(repo.id, newCommits.map(c => c.sha));
-        const uncachedCommits = newCommits.filter(c => !cached.has(c.sha));
-
-        // listCommits에서 stats를 이미 가져온 커밋은 detail 호출 스킵
-        const needsDetail = uncachedCommits.filter(c => !c.statsLoaded);
-        const alreadyDetailed = uncachedCommits.filter(c => c.statsLoaded);
-
-        const fetched = await pMapFulfilled(
-          needsDetail,
-          (c) => provider.getCommitDetail(repo.owner, repo.repo, c.sha),
-          detailConcurrency
-        );
-
-        const detailed = [...alreadyDetailed, ...fetched];
-
-        // 캐시된 커밋도 seenShas에 추가 (중복 방지)
-        for (const c of newCommits) seenShas.add(c.sha);
-
-        for (const c of detailed) {
-          newCacheCommits.push({
-            sha: c.sha, repositoryId: repo.id, branch: br,
-            author: c.author, message: c.message,
-            committedDate: c.date.slice(0, 10), committedAt: c.date,
-            additions: c.additions, deletions: c.deletions, filesChanged: c.filesChanged,
-          });
-          newCommitRecords.push({
-            sha: c.sha, message: c.message, author: c.author, date: c.date,
-            repoOwner: repo.owner, repoName: repo.repo, branch: br,
-            filesChanged: c.filesChanged, additions: c.additions, deletions: c.deletions,
-          });
-        }
-        if (commits.length < 100) break;
-        page++;
-      }
-    }
+    const { cacheCommits: newCacheCommits, commitRecords: newCommitRecords } = await fetchUncachedCommits(
+      provider, repo, { since: sinceDate, maxCommits: maxCommitsPerSync },
+    );
 
     // Cache
     if (newCacheCommits.length > 0) {

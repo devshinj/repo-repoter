@@ -76,6 +76,7 @@ export class GitLabProvider implements GitProviderClient {
     const params = new URLSearchParams();
     if (options?.branch) params.set("ref_name", options.branch);
     if (options?.since) params.set("since", options.since);
+    if (options?.until) params.set("until", options.until);
     params.set("per_page", String(options?.perPage ?? 100));
     if (options?.page) params.set("page", String(options.page));
     params.set("with_stats", "true");
