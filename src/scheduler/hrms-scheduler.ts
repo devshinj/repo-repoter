@@ -257,7 +257,11 @@ export async function startHrmsScheduler(): Promise<void> {
 
   console.log(`[HrmsScheduler] Started — ${mappings.length} repo + ${lcMappings.length} LogiCraft auto-register jobs`);
 
-  await recoverMissedExecutions();
+  // 백그라운드 실행 — instrumentation의 register()가 끝나야 Next.js가 요청을 처리하므로
+  // 복구(동기화 + LLM 생성, 수 분 소요)를 기다리면 그동안 모든 요청·헬스체크가 막힌다
+  recoverMissedExecutions().catch((err) => {
+    console.error("[HrmsScheduler] Recovery failed:", err instanceof Error ? err.message : err);
+  });
 }
 
 async function recoverMissedExecutions(): Promise<void> {
