@@ -15,7 +15,7 @@ function getClient(): OpenAI {
 }
 
 function getModel(): string {
-  return process.env.QWEN_MODEL ?? "qwen3-coder-next";
+  return process.env.QWEN_MODEL ?? "qwen3.8-flash-next";
 }
 
 export async function generateText(prompt: string): Promise<string> {

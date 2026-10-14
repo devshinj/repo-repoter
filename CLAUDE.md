@@ -111,7 +111,7 @@ src/
 DATABASE_URL          # PostgreSQL 연결 URL (예: postgresql://autobriify:devpass@localhost:5432/autobriify)
 GITHUB_TOKEN          # GitHub Personal Access Token
 QWEN_CODER_KEY        # Qwen LLM API Key
-QWEN_MODEL            # Qwen 모델명 (기본: qwen3-coder-next)
+QWEN_MODEL            # Qwen 모델명 (기본: qwen3.8-flash-next)
 QWEN_API_URL          # vLLM 서버 URL
 AUTH_HRMS_ID          # HRMS OAuth2 Client ID
 AUTH_HRMS_SECRET      # HRMS OAuth2 Client Secret
